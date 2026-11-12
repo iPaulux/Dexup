@@ -1,20 +1,29 @@
 import React, { createContext, useContext, useState } from 'react';
 
 export const LANGUAGES = [
-  { code: 'en', label: 'EN', flag: '🇬🇧' },
-  { code: 'fr', label: 'FR', flag: '🇫🇷' },
-  { code: 'ja', label: 'JA', flag: '🇯🇵' },
+  { code: 'fr', label: 'Français' },
+  { code: 'en', label: 'English' },
+  { code: 'ja', label: '日本語' },
 ];
 
-const LanguageContext = createContext({ lang: 'en', setLang: () => {} });
+const STORAGE_KEY = 'pc_lang';
+const LanguageContext = createContext({ lang: 'fr', setLang: () => {} });
+
+function initialLang() {
+  try {
+    const saved = localStorage.getItem(STORAGE_KEY);
+    if (LANGUAGES.some((l) => l.code === saved)) return saved;
+  } catch (_) {}
+  return 'fr';
+}
 
 export function LanguageProvider({ children }) {
-  const [lang, setLang] = useState('en');
-  return (
-    <LanguageContext.Provider value={{ lang, setLang }}>
-      {children}
-    </LanguageContext.Provider>
-  );
+  const [lang, setLangState] = useState(initialLang);
+  const setLang = (code) => {
+    setLangState(code);
+    try { localStorage.setItem(STORAGE_KEY, code); } catch (_) {}
+  };
+  return <LanguageContext.Provider value={{ lang, setLang }}>{children}</LanguageContext.Provider>;
 }
 
 export function useLang() {

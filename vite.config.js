@@ -37,8 +37,8 @@ export default defineConfig({
         name: 'PokéCollect',
         short_name: 'PokéCollect',
         description: 'Gère ta collection de cartes Pokémon',
-        theme_color: '#1a1a2e',
-        background_color: '#1a1a2e',
+        theme_color: '#f5f5f5',
+        background_color: '#f5f5f5',
         display: 'standalone',
         start_url: '/',
         icons: [

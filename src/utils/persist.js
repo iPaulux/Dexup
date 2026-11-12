@@ -81,9 +81,8 @@ export async function pushAllToRemote() {
     if (!userId) return false;
 
     const db = await getDb();
-    const result = db.exec('SELECT key, value FROM kv_store WHERE key IN (?, ?, ?, ?)', [
-      'owned_cards', 'favorite_cards', 'favorite_sets', 'custom_lists',
-    ]);
+    const keys = [...SYNC_KEYS];
+    const result = db.exec(`SELECT key, value FROM kv_store WHERE key IN (${keys.map(() => '?').join(', ')})`, keys);
     if (!result.length || !result[0].values.length) return false;
 
     const rows = result[0].values.map(([key, value]) => ({

@@ -1,14 +1,14 @@
 const CACHE_KEY = 'fr_en_names_v2';
-const GRAPHQL_URL = 'https://beta.pokeapi.co/graphql/v1beta';
+const GRAPHQL_URL = 'https://graphql.pokeapi.co/v1beta2';
 
 // Récupère FR et EN séparément, jointure sur pokemon_species_id
 const QUERY = `
   query {
-    fr: pokemon_v2_pokemonspeciesname(where: {language_id: {_eq: 5}}, limit: 1500) {
+    fr: pokemonspeciesname(where: {language_id: {_eq: 5}}, limit: 1500) {
       name
       pokemon_species_id
     }
-    en: pokemon_v2_pokemonspeciesname(where: {language_id: {_eq: 9}}, limit: 1500) {
+    en: pokemonspeciesname(where: {language_id: {_eq: 9}}, limit: 1500) {
       name
       pokemon_species_id
     }
