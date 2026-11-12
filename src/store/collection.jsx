@@ -4,13 +4,14 @@ import {
   getFavoriteCards, toggleFavoriteCard,
   getFavoriteSets, toggleFavoriteSet,
   getFavoriteProducts, toggleFavoriteProduct,
+  getOwnedProducts, toggleOwnedProduct,
 } from '../utils/storage';
 import { getLists, createList, deleteList, renameList, addCardToList, removeCardFromList } from '../utils/lists';
 
 const Ctx = createContext(null);
 export const useCollection = () => useContext(Ctx);
 
-const EMPTY = { owned: {}, favCards: {}, favSets: {}, favProducts: {}, lists: {}, ready: false };
+const EMPTY = { owned: {}, favCards: {}, favSets: {}, favProducts: {}, ownedProducts: {}, lists: {}, ready: false };
 
 const flip = (id, value) => (map) => {
   const next = { ...map };
@@ -24,10 +25,10 @@ export function CollectionProvider({ children }) {
   const queue = useRef(Promise.resolve());
 
   const reload = useCallback(async () => {
-    const [owned, favCards, favSets, favProducts, lists] = await Promise.all([
-      getOwnedCards(), getFavoriteCards(), getFavoriteSets(), getFavoriteProducts(), getLists(),
+    const [owned, favCards, favSets, favProducts, ownedProducts, lists] = await Promise.all([
+      getOwnedCards(), getFavoriteCards(), getFavoriteSets(), getFavoriteProducts(), getOwnedProducts(), getLists(),
     ]);
-    setData({ owned, favCards, favSets, favProducts, lists, ready: true });
+    setData({ owned, favCards, favSets, favProducts, ownedProducts, lists, ready: true });
   }, []);
 
   useEffect(() => { reload(); }, [reload]);
@@ -50,6 +51,7 @@ export function CollectionProvider({ children }) {
     setGrading: (cardId, grading) => write('owned', () => setCardGrading(cardId, grading)),
     toggleFavCard: (card) => write('favCards', () => toggleFavoriteCard(card), flip(card.id, card)),
     toggleFavSet: (set) => write('favSets', () => toggleFavoriteSet(set), flip(set.id, set)),
+    toggleOwnedProduct: (id) => write('ownedProducts', () => toggleOwnedProduct(id), flip(id, true)),
     toggleFavProduct: (product) => write('favProducts', () => toggleFavoriteProduct(product), flip(product.id, product)),
     createList: (name, icon) => write('lists', () => createList(name, icon)),
     updateList: (id, name, icon) => write('lists', () => renameList(id, name, icon)),

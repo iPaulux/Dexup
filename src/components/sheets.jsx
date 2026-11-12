@@ -4,14 +4,14 @@ import { useCollection } from '../store/collection';
 import { useLang, LANGUAGES } from '../utils/LanguageContext.jsx';
 import { supabase, signOut } from '../utils/supabase';
 import { pushAllToRemote } from '../utils/persist';
-import { isGraded, ownedCountBySet, openUrl, setLogoUrl } from '../lib/tcg';
+import { formatEuro, isGraded, ownedCountBySet, openUrl, setLogoUrl } from '../lib/tcg';
 import { loadNews, formatNewsDate } from '../lib/news';
 import { loadEvents, isPast, formatEventDate, eventTagClass } from '../lib/events';
 import { Empty, Loading, Segmented, Sheet, plural } from './ui';
 import { PokeBallPicker } from './PokeBall';
 
 // ─── Statistiques (totaux, grading, répartition par set) ─────────────────────
-export function StatsSheet({ onClose, setNames = {} }) {
+export function StatsSheet({ onClose, setNames = {}, wallet }) {
   const { owned } = useCollection();
   const stats = useMemo(() => {
     const entries = Object.values(owned);
@@ -38,6 +38,12 @@ export function StatsSheet({ onClose, setNames = {} }) {
         <div className="stack" style={{ gap: 16 }}>
           <div className="card card-pad">
             <div className="kv"><span>Cartes possédées</span><b style={{ color: 'var(--violet-ink)', fontSize: 18 }}>{stats.total}</b></div>
+            {wallet && (
+              <div className="kv">
+                <span>Valeur Cardmarket{wallet.priced < wallet.total ? ` (${wallet.priced}/${wallet.total} cartes évaluées)` : ''}</span>
+                <b>{formatEuro(wallet.value)}</b>
+              </div>
+            )}
             <div className="kv"><span>Sets entamés</span><b>{stats.bySet.length}</b></div>
             <div className="kv"><span>Cartes gradées</span><b>{stats.graded}</b></div>
             <div className="kv"><span>Cartes non gradées</span><b>{stats.total - stats.graded}</b></div>
@@ -109,7 +115,7 @@ export function NewsSheet({ onClose }) {
       {!loading && !error && (
         <div className="stack">
           <p className="tiny dim">
-            {articles[0]?.source === 'rss' ? `${articles[0].domain} · mis à jour toutes les 24 h` : 'r/PokemonTCG · posts populaires'}
+            {articles[0]?.domain} · mis à jour toutes les 24 h
           </p>
           {articles.map((a, i) => (
             <button className="list-row" key={i} onClick={() => openUrl(a.link)}>
@@ -181,7 +187,7 @@ export function EventsSheet({ onClose }) {
               <span className="grow">
                 <span className={`tag ${eventTagClass(ev.type)}`}>{ev.type}</span>
                 <b className="clamp2" style={{ fontSize: 14, marginTop: 4 }}>{ev.name}</b>
-                <span className="row tiny muted" style={{ gap: 4, marginTop: 2 }}><MapPin size={12} /> {ev.venue}, {ev.city}</span>
+                <span className="row tiny muted" style={{ gap: 4, marginTop: 2 }}><MapPin size={12} /> {[ev.venue, ev.city].filter(Boolean).join(', ')}</span>
                 {ev.dateEnd && ev.dateEnd !== ev.date && <span className="tiny dim">Jusqu'au {formatEventDate(ev.dateEnd)}</span>}
               </span>
               {ev.url && <ChevronRight size={18} color="var(--ink-3)" />}

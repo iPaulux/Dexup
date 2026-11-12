@@ -5,6 +5,7 @@
  */
 
 const FEEDS = [
+  'https://pokemonblog.com/category/tcg/feed',
   'https://www.pokebeach.com/feed',
   'https://www.pokeguardian.com/feed/',
   'https://limitlesstcg.com/feed',
@@ -16,7 +17,7 @@ const CORS = {
   'Access-Control-Allow-Headers': 'Content-Type',
 };
 
-exports.handler = async (event) => {
+export const handler = async (event) => {
   // Preflight
   if (event.httpMethod === 'OPTIONS') {
     return { statusCode: 204, headers: CORS, body: '' };
@@ -26,7 +27,7 @@ exports.handler = async (event) => {
     try {
       const res = await fetch(feedUrl, {
         headers: {
-          'User-Agent': 'Mozilla/5.0 (compatible; PokéCollect/1.0)',
+          'User-Agent': 'PokeCollect/1.0 (feed reader)',
           Accept: 'application/rss+xml, application/xml, text/xml, */*',
         },
         signal: AbortSignal.timeout(8000),

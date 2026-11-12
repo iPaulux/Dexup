@@ -175,6 +175,7 @@ b { font-weight: 600; }
 .icon-btn:hover { background: var(--surface-2); }
 .icon-btn.is-on { border-color: var(--gold); color: var(--gold); }
 .icon-btn.is-violet { background: var(--ink); border-color: var(--ink); color: #fff; }
+.icon-btn.is-owned { background: var(--signal); border-color: var(--signal); color: #fff; }
 .icon-btn.plain { background: none; border: none; }
 .avatar-btn { width: 42px; height: 42px; border-radius: 50%; overflow: hidden; border: 1px solid var(--line); flex-shrink: 0; }
 .avatar-btn img { width: 100%; height: 100%; object-fit: cover; }

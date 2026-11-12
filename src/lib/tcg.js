@@ -86,44 +86,91 @@ export function sortCards(cards) {
   });
 }
 
+// Au-delà de ~150 cartes par page l'API devient lente et instable : on pagine par 75.
+const PAGE_SIZE = 75;
+const cardsInMemory = new Map();
 const cardsInFlight = {};
 
 export function loadSetCards(setId) {
+  if (cardsInMemory.has(setId)) return Promise.resolve(cardsInMemory.get(setId));
   if (!cardsInFlight[setId]) {
     cardsInFlight[setId] = (async () => {
       const key = `cards:${setId}`;
       const cached = await getApiCache(key, CARDS_TTL);
       // Un cache d'exactement 250 cartes peut venir d'une ancienne requête tronquée par l'API.
       const verifiedKey = `pc_cards_full:${setId}`;
-      if (cached && (cached.length !== API_MAX_PAGE || localStorage.getItem(verifiedKey))) return sortCards(cached);
-      const all = [];
-      for (let page = 1; page <= 4; page++) {
-        const json = await getJson(pokemonApiUrl('/cards', { q: `set.id:${setId}`, pageSize: API_MAX_PAGE, page }));
-        all.push(...(json.data || []));
-        if (all.length >= (json.totalCount || 0) || !(json.data || []).length) break;
+      let cards;
+      if (cached?.length && (cached.length !== API_MAX_PAGE || localStorage.getItem(verifiedKey))) {
+        cards = sortCards(cached);
+      } else {
+        const all = [];
+        for (let page = 1, total = Infinity; all.length < total; page++) {
+          const json = await getJson(pokemonApiUrl('/cards', { q: `set.id:${setId}`, pageSize: PAGE_SIZE, page }));
+          const batch = json.data || [];
+          total = json.totalCount ?? batch.length;
+          all.push(...batch);
+          if (batch.length < PAGE_SIZE) break;
+        }
+        cards = sortCards(all);
+        if (cards.length) {
+          await setApiCache(key, cards);
+          try { localStorage.setItem(verifiedKey, '1'); } catch (_) {}
+        }
       }
-      const sorted = sortCards(all);
-      await setApiCache(key, sorted);
-      try { localStorage.setItem(verifiedKey, '1'); } catch (_) {}
-      return sorted;
+      if (cards.length) cardsInMemory.set(setId, cards);
+      return cards;
     })().finally(() => { delete cardsInFlight[setId]; });
   }
   return cardsInFlight[setId];
 }
 
-/** Charge les données complètes d'une sélection de cartes, set par set. */
-export async function loadCardsByIds(cardIds) {
+/**
+ * Charge les données complètes d'une sélection de cartes, plusieurs sets en parallèle.
+ * Un set lent ou en échec ne bloque pas les autres : il est listé dans `failed`.
+ */
+export async function loadCardsByIds(cardIds, concurrency = 5) {
   const bySet = {};
   for (const id of cardIds) (bySet[setIdOf(id)] ||= new Set()).add(id);
+  const queue = Object.keys(bySet);
   const map = {};
-  await Promise.all(Object.entries(bySet).map(async ([sid, ids]) => {
-    try {
-      const cards = await loadSetCards(sid);
-      for (const c of cards) if (ids.has(c.id)) map[c.id] = c;
-    } catch (_) { /* set indisponible : on l'ignore */ }
-  }));
-  return map;
+  const failed = [];
+  const worker = async () => {
+    while (queue.length) {
+      const sid = queue.shift();
+      try {
+        for (const c of await loadSetCards(sid)) if (bySet[sid].has(c.id)) map[c.id] = c;
+      } catch (_) {
+        failed.push(sid);
+      }
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(concurrency, queue.length) }, worker));
+  return { map, failed };
 }
+
+/** Valeur de la collection : somme des prix tendance Cardmarket des cartes possédées. */
+export function useWallet(owned) {
+  const [wallet, setWallet] = useState(null); // null = calcul en cours
+  useEffect(() => {
+    let alive = true;
+    const ids = Object.keys(owned);
+    if (!ids.length) { setWallet({ value: 0, priced: 0, total: 0 }); return undefined; }
+    loadCardsByIds(ids).then(({ map }) => {
+      if (!alive) return;
+      let value = 0;
+      let priced = 0;
+      for (const id of ids) {
+        const trend = map[id]?.cardmarket?.prices?.trendPrice;
+        if (trend != null) { value += trend; priced++; }
+      }
+      setWallet({ value, priced, total: ids.length });
+    });
+    return () => { alive = false; };
+  }, [owned]);
+  return wallet;
+}
+
+export const formatEuro = (v) => `${v.toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €`;
 
 const SEARCH_SELECT = 'id,name,number,rarity,set,images';
 

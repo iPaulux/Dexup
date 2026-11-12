@@ -89,6 +89,25 @@ export async function toggleFavoriteProduct(product) {
   return favs;
 }
 
+// ─── Produits possédés ──────────────────────────────────────────────────────
+const OWNED_PRODUCTS_KEY = 'owned_products';
+
+export async function getOwnedProducts() {
+  const data = await readStore(OWNED_PRODUCTS_KEY);
+  return data ?? {};
+}
+
+export async function toggleOwnedProduct(productId) {
+  const owned = await getOwnedProducts();
+  if (owned[productId]) {
+    delete owned[productId];
+  } else {
+    owned[productId] = true;
+  }
+  await writeStore(OWNED_PRODUCTS_KEY, owned);
+  return owned;
+}
+
 // ─── Favoris sets ────────────────────────────────────────────────────────────
 // Stocke { setId: { id, name, series, total, images, releaseDate } }
 

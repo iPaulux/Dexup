@@ -4,7 +4,7 @@ import { ArrowUpRight, CalendarDays, Layers, Newspaper, ShoppingBag } from 'luci
 import { useCollection } from '../store/collection';
 import { useLang } from '../utils/LanguageContext.jsx';
 import { getLocalizedSetName } from '../utils/setNames';
-import { isGraded, ownedCountBySet, useSets } from '../lib/tcg';
+import { formatEuro, isGraded, ownedCountBySet, useSets, useWallet } from '../lib/tcg';
 import { Page, Progress, pct, plural } from '../components/ui';
 import { EventsSheet, NewsSheet, StatsSheet } from '../components/sheets';
 
@@ -25,6 +25,7 @@ export default function Home({ onAccount }) {
   const { lang } = useLang();
   const { sets } = useSets();
   const [sheet, setSheet] = useState(null);
+  const wallet = useWallet(owned);
 
   const counts = useMemo(() => ownedCountBySet(owned), [owned]);
   const total = Object.keys(owned).length;
@@ -61,6 +62,7 @@ export default function Home({ onAccount }) {
         <div className="hero-stats">
           <span className="hero-chip"><b>{Object.keys(counts).length}</b>{Object.keys(counts).length > 1 ? 'sets entamés' : 'set entamé'}</span>
           <span className="hero-chip"><b>{graded}</b>{graded > 1 ? 'gradées' : 'gradée'}</span>
+          {total > 0 && <span className="hero-chip"><b>{wallet ? formatEuro(wallet.value) : '…'}</b>valeur</span>}
         </div>
       </button>
 
@@ -107,7 +109,7 @@ export default function Home({ onAccount }) {
         </section>
       )}
 
-      {sheet === 'stats' && <StatsSheet onClose={close} setNames={setNames} />}
+      {sheet === 'stats' && <StatsSheet onClose={close} setNames={setNames} wallet={wallet} />}
       {sheet === 'news' && <NewsSheet onClose={close} />}
       {sheet === 'events' && <EventsSheet onClose={close} />}
     </Page>

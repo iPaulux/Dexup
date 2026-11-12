@@ -26,10 +26,33 @@ function sqlWasmPlugin() {
   };
 }
 
+// En dev, sert les fonctions Netlify (actualités, proxy API) comme en production.
+function netlifyFunctionsDevPlugin() {
+  return {
+    name: 'netlify-functions-dev',
+    configureServer(server) {
+      server.middlewares.use('/.netlify/functions', async (req, res) => {
+        try {
+          const url = new URL(req.url, 'http://localhost');
+          const name = url.pathname.replace(/^\/+/, '').replace(/[^a-z0-9-]/gi, '');
+          const { handler } = await import(path.resolve(__dirname, 'netlify/functions', `${name}.js`));
+          const out = await handler({ httpMethod: req.method, queryStringParameters: Object.fromEntries(url.searchParams) });
+          res.writeHead(out.statusCode, out.headers);
+          res.end(out.body);
+        } catch (e) {
+          res.writeHead(500, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: e.message }));
+        }
+      });
+    },
+  };
+}
+
 export default defineConfig({
   plugins: [
     react(),
     sqlWasmPlugin(),
+    netlifyFunctionsDevPlugin(),
     VitePWA({
       registerType: 'autoUpdate',
       includeAssets: ['favicon.ico', 'TiploufICON.png', 'apple-touch-icon.png'],
@@ -66,11 +89,11 @@ export default defineConfig({
             },
           },
           {
-            // Previews Reddit (actualités TCG)
-            urlPattern: /^https:\/\/(?:preview|external-preview|i)\.redd\.it\//,
+            // Vignettes des actualités
+            urlPattern: /^https:\/\/pokemonblog\.com\/wp-content\//,
             handler: 'StaleWhileRevalidate',
             options: {
-              cacheName: 'reddit-images',
+              cacheName: 'news-images',
               expiration: { maxEntries: 200, maxAgeSeconds: 86400 },
               cacheableResponse: { statuses: [0, 200] },
             },

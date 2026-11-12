@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ExternalLink, SearchX } from 'lucide-react';
+import { Check, ExternalLink, Plus, SearchX } from 'lucide-react';
 import { useCollection } from '../store/collection';
 import { PRODUCTS, PRODUCT_TYPES, PRICE_SOURCE, PRICE_UPDATED } from '../data/products';
 import { openUrl, setLogoUrl } from '../lib/tcg';
@@ -19,8 +19,9 @@ export function ProductImage({ product }) {
 }
 
 export function ProductRow({ product, onOpen }) {
-  const { favProducts, toggleFavProduct } = useCollection();
+  const { favProducts, ownedProducts, toggleFavProduct, toggleOwnedProduct } = useCollection();
   const packs = product.contents?.packs;
+  const isOwned = !!ownedProducts[product.id];
   return (
     <Tappable onClick={() => onOpen(product)}>
       <div className="thumb-box" style={{ width: 72, height: 76 }}><ProductImage product={product} /></div>
@@ -31,8 +32,15 @@ export function ProductRow({ product, onOpen }) {
           {product.setId && <span className="tag tag-violet">{product.setId.toUpperCase()}</span>}
           {packs > 0 && <span className="tiny dim">{packs} booster{packs > 1 ? 's' : ''}</span>}
         </div>
+        <b style={{ display: 'block', marginTop: 6, fontFamily: 'var(--mono)', fontSize: 13 }}>{product.price}</b>
       </div>
-      <b style={{ fontFamily: 'var(--display)', fontSize: 16, whiteSpace: 'nowrap' }}>{product.price}</b>
+      <button
+        className={`icon-btn${isOwned ? ' is-owned' : ''}`} aria-pressed={isOwned}
+        aria-label={isOwned ? `Retirer ${product.nameFr || product.name} de mes produits` : `Marquer ${product.nameFr || product.name} comme possédé`}
+        onClick={(e) => { e.stopPropagation(); toggleOwnedProduct(product.id); }}
+      >
+        {isOwned ? <Check size={18} strokeWidth={3} /> : <Plus size={18} />}
+      </button>
       <StarButton on={!!favProducts[product.id]} onClick={() => toggleFavProduct(product)} />
     </Tappable>
   );
@@ -40,13 +48,21 @@ export function ProductRow({ product, onOpen }) {
 
 export function ProductSheet({ product, onClose }) {
   const navigate = useNavigate();
-  const { favProducts, toggleFavProduct } = useCollection();
+  const { favProducts, ownedProducts, toggleFavProduct, toggleOwnedProduct } = useCollection();
+  const isOwned = !!ownedProducts[product.id];
   const contents = product.contents || {};
   const name = product.nameFr || product.name;
   const cardmarket = `https://www.cardmarket.com/fr/Pokemon/Products/Search?searchString=${encodeURIComponent(name)}`;
 
   return (
-    <Sheet title={name} onClose={onClose} tall>
+    <Sheet
+      title={name} onClose={onClose} tall
+      footer={
+        <button className={`btn grow ${isOwned ? 'btn-owned' : 'btn-violet'}`} aria-pressed={isOwned} onClick={() => toggleOwnedProduct(product.id)}>
+          {isOwned ? <><Check size={19} strokeWidth={3} /> Possédé</> : <><Plus size={19} /> Marquer comme possédé</>}
+        </button>
+      }
+    >
       <div className="stack" style={{ gap: 14 }}>
         <div className="card card-pad" style={{ position: 'relative' }}>
           <span style={{ position: 'absolute', top: 8, right: 8 }}>
@@ -97,7 +113,9 @@ export function ProductSheet({ product, onClose }) {
 }
 
 export default function Products() {
+  const { ownedProducts } = useCollection();
   const [type, setType] = useState('all');
+  const [onlyOwned, setOnlyOwned] = useState(false);
   const [query, setQuery] = useState('');
   const [selected, setSelected] = useState(null);
 
@@ -105,21 +123,26 @@ export default function Products() {
     const q = query.trim().toLowerCase();
     return PRODUCTS.filter((p) => {
       if (type !== 'all' && p.type !== type) return false;
+      if (onlyOwned && !ownedProducts[p.id]) return false;
       if (!q) return true;
       return [p.name, p.nameFr, p.setName, p.series, p.setId].some((v) => v && v.toLowerCase().includes(q));
     });
-  }, [type, query]);
+  }, [type, query, onlyOwned, ownedProducts]);
 
   return (
     <Page>
-      <TopBar title="Produits" back="/" />
+      <TopBar title="Produits" back="/">
+        <button className={`pill${onlyOwned ? ' is-active' : ''}`} aria-pressed={onlyOwned} onClick={() => setOnlyOwned((v) => !v)}>
+          Possédés <span className="pill-count">{Object.keys(ownedProducts).length}</span>
+        </button>
+      </TopBar>
       <div className="stack" style={{ gap: 12, marginBottom: 16 }}>
         <SearchField value={query} onChange={setQuery} placeholder="Produit, extension, code de set…" />
         <Pills options={TYPE_OPTIONS} value={type} onChange={setType} />
       </div>
 
       {shown.length === 0 ? (
-        <Empty icon={SearchX} title="Aucun produit trouvé" text="Essaie un autre nom ou une autre catégorie." />
+        <Empty icon={SearchX} title="Aucun produit trouvé" text={onlyOwned ? 'Touche le + d\'un produit pour le marquer comme possédé.' : 'Essaie un autre nom ou une autre catégorie.'} />
       ) : (
         <div className="stack">
           {shown.map((p) => <ProductRow key={p.id} product={p} onOpen={setSelected} />)}

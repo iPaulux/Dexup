@@ -10,15 +10,29 @@ import { Empty, Loading, Page, Tappable, TopBar, ViewToggle, plural, usePersiste
 
 // Charge une fois les données des cartes visées ; les cartes retirées ensuite restent affichées (grisées).
 function useCardData(ids, ready) {
-  const [state, setState] = useState({ map: {}, loading: true });
+  const [state, setState] = useState({ map: {}, failed: [], loading: true });
+  const [attempt, setAttempt] = useState(0);
   useEffect(() => {
     if (!ready) return undefined;
     let alive = true;
-    loadCardsByIds(ids).then((map) => alive && setState({ map, loading: false }));
+    setState((s) => ({ ...s, loading: true }));
+    loadCardsByIds(ids).then(({ map, failed }) => alive && setState({ map, failed, loading: false }));
     return () => { alive = false; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ready]);
-  return state;
+  }, [ready, attempt]);
+  return { ...state, retry: () => setAttempt((n) => n + 1) };
+}
+
+function FailedSets({ failed, retry }) {
+  if (!failed.length) return null;
+  return (
+    <div className="row msg msg-err" style={{ marginBottom: 14 }}>
+      <span className="grow">
+        {failed.length > 1 ? `${failed.length} extensions n'ont pas pu être chargées` : "1 extension n'a pas pu être chargée"} — des cartes manquent ci-dessous.
+      </span>
+      <button className="btn btn-dark btn-sm" onClick={retry}>Réessayer</button>
+    </div>
+  );
 }
 
 export function Collection() {
@@ -27,7 +41,7 @@ export function Collection() {
   const { lang } = useLang();
   const { sets } = useSets();
   const [mode, setMode] = usePersistedState('pc_cards_view', 'grid');
-  const { map, loading } = useCardData(Object.keys(owned), ready);
+  const { map, failed, loading, retry } = useCardData(Object.keys(owned), ready);
 
   const groups = useMemo(() => {
     const meta = Object.fromEntries(sets.map((s) => [s.id, s]));
@@ -52,7 +66,8 @@ export function Collection() {
       </TopBar>
 
       {(!ready || loading) && <Loading label="Chargement de ta collection…" />}
-      {ready && !loading && groups.length === 0 && (
+      {ready && !loading && <FailedSets failed={failed} retry={retry} />}
+      {ready && !loading && groups.length === 0 && !failed.length && (
         <Empty icon={Layers} title="Aucune carte pour l'instant" text="Ouvre une extension et touche le + des cartes que tu possèdes.">
           <button className="btn btn-violet" onClick={() => navigate('/sets')}>Parcourir les extensions</button>
         </Empty>
@@ -81,7 +96,7 @@ export function Graded() {
   const { ready, owned, openCard } = useCollection();
   const [closed, setClosed] = useState({});
   const gradedIds = useMemo(() => Object.keys(owned).filter((id) => isGraded(owned[id])), [owned]);
-  const { map, loading } = useCardData(gradedIds, ready);
+  const { map, failed, loading, retry } = useCardData(gradedIds, ready);
 
   const sections = useMemo(() => {
     const byCompany = {};
@@ -103,7 +118,8 @@ export function Graded() {
       <TopBar title="Cartes gradées" back="/binder" />
 
       {(!ready || loading) && <Loading label="Chargement des grades…" />}
-      {ready && !loading && sections.length === 0 && (
+      {ready && !loading && <FailedSets failed={failed} retry={retry} />}
+      {ready && !loading && sections.length === 0 && !failed.length && (
         <Empty icon={Trophy} title="Aucune carte gradée" text="Ouvre la fiche d'une carte que tu possèdes, puis « Ajouter un grade »." />
       )}
 

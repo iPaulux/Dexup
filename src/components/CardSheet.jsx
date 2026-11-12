@@ -184,8 +184,6 @@ function CardSheetInner({ card }) {
   const inLists = Object.values(lists).filter((l) => l.cards?.[card.id]).length;
   const rarity = RARITY[c.rarity];
   const cm = full?.cardmarket?.prices;
-  const tcp = full?.tcgplayer?.prices;
-  const tcpVariant = tcp?.holofoil ?? tcp?.normal ?? tcp?.['1stEditionHolofoil'] ?? tcp?.reverseHolofoil ?? null;
 
   const onOwnedClick = () => (grading ? setConfirmRemove(true) : toggleOwned(card.id));
 
@@ -244,20 +242,11 @@ function CardSheetInner({ card }) {
 
           {loading ? (
             <div className="card card-pad row"><div className="spinner sm" /><span className="small muted">Chargement des prix…</span></div>
-          ) : cm || tcpVariant ? (
-            <>
-              {cm && (
-                <PriceBlock title="Cardmarket" unit="€" rows={[
-                  ['Tendance', cm.trendPrice], ['Vente moyenne', cm.averageSellPrice], ['Prix bas', cm.lowPrice],
-                  ['Moyenne 7 j', cm.avg7], ['Moyenne 30 j', cm.avg30],
-                ]} />
-              )}
-              {tcpVariant && (
-                <PriceBlock title="TCGPlayer" unit="$" rows={[
-                  ['Marché', tcpVariant.market], ['Bas', tcpVariant.low], ['Haut', tcpVariant.high], ['Médian', tcpVariant.mid],
-                ]} />
-              )}
-            </>
+          ) : cm ? (
+            <PriceBlock title="Cardmarket" unit="€" rows={[
+              ['Tendance', cm.trendPrice], ['Vente moyenne', cm.averageSellPrice], ['Prix bas', cm.lowPrice],
+              ['Moyenne 7 j', cm.avg7], ['Moyenne 30 j', cm.avg30],
+            ]} />
           ) : (
             <p className="small dim" style={{ textAlign: 'center' }}>Prix non disponible pour cette carte.</p>
           )}
