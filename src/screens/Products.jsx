@@ -32,7 +32,7 @@ export function ProductRow({ product, onOpen }) {
           {product.setId && <span className="tag tag-violet">{product.setId.toUpperCase()}</span>}
           {packs > 0 && <span className="tiny dim">{packs} booster{packs > 1 ? 's' : ''}</span>}
         </div>
-        <b style={{ display: 'block', marginTop: 6, fontFamily: 'var(--mono)', fontSize: 13 }}>{product.price}</b>
+        <b style={{ display: 'block', marginTop: 6, fontFamily: 'var(--mono)', fontSize: 13 }}>{product.price ?? 'Prix à venir'}</b>
       </div>
       <button
         className={`icon-btn${isOwned ? ' is-owned' : ''}`} aria-pressed={isOwned}
@@ -82,7 +82,7 @@ export function ProductSheet({ product, onClose }) {
             <p className="small muted">Prix indicatif {PRICE_SOURCE}</p>
             <p className="tiny dim">Mis à jour {PRICE_UPDATED}</p>
           </div>
-          <b style={{ fontFamily: 'var(--display)', fontSize: 28, color: 'var(--violet-ink)' }}>{product.price}</b>
+          <b style={{ fontFamily: 'var(--display)', fontSize: product.price ? 28 : 18, color: 'var(--violet-ink)' }}>{product.price ?? 'À venir'}</b>
         </div>
 
         <div className="card card-pad">

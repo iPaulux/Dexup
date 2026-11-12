@@ -23,6 +23,21 @@ export const PRODUCTS = [
   // MEGA EVOLUTION (2025-2026)
   // ═══════════════════════════════════════════════════════════════
 
+  // Prix à null = pas encore relevé sur Cardmarket (affiché « Prix à venir »).
+  // ─── me6 — Delta Reign (2026) ─────────────────────────────────
+  { id:'me6-booster', name:'Booster Delta Reign', nameFr:'Booster Delta Reign', type:'booster', setId:'me6', setName:'Delta Reign', series:'Mega Evolution', releaseDate:'2026/11/06', price:null, image:null, contents:{packs:1,cardsPerPack:10}, description:'Booster 10 cartes du set Delta Reign.', color:'#1a3a2a' },
+  { id:'me6-display', name:'Display Delta Reign', nameFr:'Display Delta Reign', type:'display', setId:'me6', setName:'Delta Reign', series:'Mega Evolution', releaseDate:'2026/11/06', price:null, image:null, contents:{packs:36,cardsPerPack:10}, color:'#1a3a2a' },
+  { id:'me6-etb', name:'ETB Delta Reign', nameFr:'ETB Delta Reign', type:'etb', setId:'me6', setName:'Delta Reign', series:'Mega Evolution', releaseDate:'2026/11/06', price:null, image:null, contents:{packs:9,cardsPerPack:10,extras:['65 protège-cartes','45 cartes Énergie','accessoires']}, color:'#1a3a2a' },
+
+  // ─── me55 — 30th Celebration (2026, set spécial) ──────────────
+  { id:'me55-booster', name:'Booster 30th Celebration', nameFr:'Booster 30th Celebration', type:'booster', setId:'me55', setName:'30th Celebration', series:'Mega Evolution', releaseDate:'2026/09/16', price:null, image:null, contents:{packs:1,cardsPerPack:10}, description:'Booster 10 cartes du set 30th Celebration.', color:'#3a2a1a' },
+  { id:'me55-etb', name:'ETB 30th Celebration', nameFr:'ETB 30th Celebration', type:'etb', setId:'me55', setName:'30th Celebration', series:'Mega Evolution', releaseDate:'2026/09/16', price:null, image:null, contents:{packs:9,cardsPerPack:10,extras:['65 protège-cartes','45 cartes Énergie','accessoires']}, color:'#3a2a1a' },
+
+  // ─── me5 — Pitch Black (2026) ─────────────────────────────────
+  { id:'me5-booster', name:'Booster Pitch Black', nameFr:'Booster Pitch Black', type:'booster', setId:'me5', setName:'Pitch Black', series:'Mega Evolution', releaseDate:'2026/07/17', price:null, image:null, contents:{packs:1,cardsPerPack:10}, description:'Booster 10 cartes du set Pitch Black.', color:'#1a1a1a' },
+  { id:'me5-display', name:'Display Pitch Black', nameFr:'Display Pitch Black', type:'display', setId:'me5', setName:'Pitch Black', series:'Mega Evolution', releaseDate:'2026/07/17', price:null, image:null, contents:{packs:36,cardsPerPack:10}, color:'#1a1a1a' },
+  { id:'me5-etb', name:'ETB Pitch Black', nameFr:'ETB Pitch Black', type:'etb', setId:'me5', setName:'Pitch Black', series:'Mega Evolution', releaseDate:'2026/07/17', price:null, image:null, contents:{packs:9,cardsPerPack:10,extras:['65 protège-cartes','45 cartes Énergie','accessoires']}, color:'#1a1a1a' },
+
   // ─── me4 — Chaos Rising / Chaos Ascendant (2026) ─────────────
   { id:'me4-booster', name:'Booster Chaos Rising', nameFr:'Booster Chaos Ascendant', type:'booster', setId:'me4', setName:'Chaos Rising', series:'Mega Evolution', releaseDate:'2026/06/27', price:'4.80€', image:null, contents:{packs:1,cardsPerPack:10}, description:'Booster 10 cartes du set Chaos Ascendant.', color:'#1a1a3a' },
   { id:'me4-display', name:'Display Chaos Rising', nameFr:'Display Chaos Ascendant', type:'display', setId:'me4', setName:'Chaos Rising', series:'Mega Evolution', releaseDate:'2026/06/27', price:'158€', image:null, contents:{packs:36,cardsPerPack:10}, color:'#1a1a3a' },
