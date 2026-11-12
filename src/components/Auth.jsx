@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { signIn, signUp } from '../utils/supabase';
 import { Segmented } from './ui';
+import Logo from './Logo';
 
 export function Splash() {
   const [phase, setPhase] = useState('in'); // in | out | gone
@@ -12,7 +13,7 @@ export function Splash() {
   if (phase === 'gone') return null;
   return (
     <div className={`splash${phase === 'out' ? ' out' : ''}`} aria-hidden="true">
-      <img src="/icon-1024.png" alt="" />
+      <Logo size={96} />
       <b>PokéCollect</b>
     </div>
   );
@@ -52,7 +53,7 @@ export default function Auth() {
   return (
     <div className="auth">
       <div className="auth-hero">
-        <img src="/TiploufICON.png" alt="" />
+        <Logo size={64} />
         <h1>Toute ta collection<br />au <mark>même endroit</mark></h1>
       </div>
 

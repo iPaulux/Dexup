@@ -55,17 +55,19 @@ export default defineConfig({
     netlifyFunctionsDevPlugin(),
     VitePWA({
       registerType: 'autoUpdate',
-      includeAssets: ['favicon.ico', 'TiploufICON.png', 'apple-touch-icon.png'],
+      includeAssets: ['favicon.ico', 'logo.svg', 'apple-touch-icon.png'],
       manifest: {
         name: 'PokéCollect',
         short_name: 'PokéCollect',
         description: 'Gère ta collection de cartes Pokémon',
-        theme_color: '#f5f5f5',
+        theme_color: '#655ba4',
         background_color: '#f5f5f5',
         display: 'standalone',
         start_url: '/',
         icons: [
-          { src: 'TiploufICON.png', sizes: '1024x1024', type: 'image/png', purpose: 'any maskable' },
+          { src: 'icon-192.png', sizes: '192x192', type: 'image/png', purpose: 'any maskable' },
+          { src: 'icon-512.png', sizes: '512x512', type: 'image/png', purpose: 'any maskable' },
+          { src: 'icon-1024.png', sizes: '1024x1024', type: 'image/png', purpose: 'any maskable' },
         ],
       },
       workbox: {

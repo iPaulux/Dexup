@@ -9,6 +9,7 @@ import { loadNews, formatNewsDate } from '../lib/news';
 import { loadEvents, isPast, formatEventDate, eventTagClass } from '../lib/events';
 import { Empty, Loading, Segmented, Sheet, plural } from './ui';
 import { PokeBallPicker } from './PokeBall';
+import Logo from './Logo';
 
 // ─── Statistiques (totaux, grading, répartition par set) ─────────────────────
 export function StatsSheet({ onClose, setNames = {}, wallet }) {
@@ -233,7 +234,7 @@ export function AccountSheet({ onClose, session }) {
     <Sheet title="Mon compte" onClose={onClose}>
       <div className="stack" style={{ gap: 16 }}>
         <div className="list-row">
-          <img src="/TiploufICON.png" alt="" style={{ width: 46, height: 46, borderRadius: '50%' }} />
+          <Logo size={40} />
           <div className="grow">
             <p className="tiny dim">Connecté en tant que</p>
             <b className="clamp1">{session?.user?.email ?? '—'}</b>

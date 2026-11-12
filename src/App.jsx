@@ -7,6 +7,7 @@ import { supabase } from './utils/supabase';
 import { CollectionProvider, useCollection } from './store/collection';
 import Auth, { Splash } from './components/Auth';
 import CardSheet from './components/CardSheet';
+import Logo from './components/Logo';
 import { AccountSheet } from './components/sheets';
 import Home from './screens/Home';
 import Sets from './screens/Sets';
@@ -55,7 +56,7 @@ function Sidebar({ email, onAccount }) {
   const { pathname } = useLocation();
   return (
     <aside className="sidebar">
-      <div className="sidebar-brand"><img src="/TiploufICON.png" alt="" />PokéCollect</div>
+      <div className="sidebar-brand"><Logo size={28} />PokéCollect</div>
       {TABS.map(({ path, label, Icon, match }) => {
         const active = match(pathname);
         return (
@@ -68,7 +69,7 @@ function Sidebar({ email, onAccount }) {
         );
       })}
       <button className="side-link sidebar-foot" onClick={onAccount}>
-        <img src="/TiploufICON.png" alt="" style={{ width: 28, height: 28, borderRadius: '50%' }} />
+        <Logo size={24} />
         <span className="clamp1 small">{email ?? 'Mon compte'}</span>
       </button>
     </aside>

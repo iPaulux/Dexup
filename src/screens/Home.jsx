@@ -5,6 +5,7 @@ import { useCollection } from '../store/collection';
 import { useLang } from '../utils/LanguageContext.jsx';
 import { getLocalizedSetName } from '../utils/setNames';
 import { formatEuro, isGraded, ownedCountBySet, useSets, useWallet } from '../lib/tcg';
+import Logo from '../components/Logo';
 import { Page, Progress, pct, plural } from '../components/ui';
 import { EventsSheet, NewsSheet, StatsSheet } from '../components/sheets';
 
@@ -50,7 +51,7 @@ export default function Home({ onAccount }) {
       <header className="topbar">
         <h1 className="brand">PokéCollect</h1>
         <button className="avatar-btn" onClick={onAccount} aria-label="Mon compte">
-          <img src="/TiploufICON.png" alt="" />
+          <Logo size={28} />
         </button>
       </header>
 
