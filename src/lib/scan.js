@@ -3,25 +3,30 @@
 // L'analyse du numéro (corrections O→0, I/l/|→1) est adaptée de pokeum
 // (app/signals/ocr.py), © 2026 TBLgGamin, licence MIT : voir third_party/pokeum/LICENSE.
 
-let workerPromise = null;
+// Deux moteurs : le numéro et le nom se lisent en parallèle (un worker Tesseract ne traite
+// qu'une image à la fois). Le moteur 0 lit le bas de la carte en mode « bloc » (psm 6) :
+// une fois binarisé, c'est lui qui retrouve le mieux la ligne du numéro (18 images sur 32
+// contre 11 en psm 11). Le moteur 1 lit le nom en mode « texte épars » (psm 11) : il partage
+// sa ligne avec le stade et les PV.
+const WORKER_PSM = ['6', '11'];
+const workerPromises = [null, null];
 
-export function getOcrWorker() {
-  if (!workerPromise) {
-    workerPromise = (async () => {
+export function getOcrWorker(slot = 0) {
+  if (!workerPromises[slot]) {
+    workerPromises[slot] = (async () => {
       const { createWorker } = await import('tesseract.js');
       const worker = await createWorker('eng', 1, { logger: () => {} });
-      // Le bas d'une carte tient sur plusieurs lignes (illustrateur, numéro, texte) : mode « bloc de texte ».
-      // Le mode « ligne unique » ne lit rien dès qu'une deuxième ligne entre dans le cadre.
-      await worker.setParameters({ tessedit_pageseg_mode: '6' });
+      await worker.setParameters({ tessedit_pageseg_mode: WORKER_PSM[slot] });
       return worker;
-    })().catch((e) => { workerPromise = null; throw e; });
+    })().catch((e) => { workerPromises[slot] = null; throw e; });
   }
-  return workerPromise;
+  return workerPromises[slot];
 }
 
 /** Charge Tesseract en arrière-plan pour que le premier scan ne paie pas le téléchargement. */
 export function warmOcr() {
-  getOcrWorker().catch(() => {});
+  getOcrWorker(0).catch(() => {});
+  getOcrWorker(1).catch(() => {});
 }
 
 /**
@@ -47,25 +52,34 @@ export function sourceRect(video, el) {
   return { x, y, width, height };
 }
 
-/** Découpe dans la vidéo exactement ce que l'utilisateur voit dans `zoneEl`. */
-export function cropZone(video, zoneEl) {
-  return cropRect(video, sourceRect(video, zoneEl));
-}
-
 // Bandeau du nom, en fraction du cadre de la carte. Plus haut que la carte elle-même
 // (de -6 % à 16 %) : une carte tenue à la main est rarement pile dans le cadre.
 const TITLE_BAND = [0.02, -0.06, 0.8, 0.16];
 
 /** Découpe le bandeau du nom (en haut de la carte) dans le cadre `frameEl`. */
 export function cropTitle(video, frameEl) {
+  return cropFraction(video, frameEl, TITLE_BAND);
+}
+
+// Bande du numéro, en fraction du cadre : tout le bas de la carte (20 %) et un peu au-delà,
+// à gauche comme à droite. Le numéro est en bas à gauche depuis 2013, en bas à droite avant ;
+// et une carte tenue à la main n'est jamais pile dans le cadre. Lire toute la bande évite
+// d'avoir à viser une petite zone.
+const NUMBER_BAND = [-0.02, 0.8, 1.02, 1.04];
+
+/** Découpe la bande du bas de la carte (numéro de collection) dans le cadre `frameEl`. */
+export function cropNumberBand(video, frameEl) {
+  return cropFraction(video, frameEl, NUMBER_BAND);
+}
+
+function cropFraction(video, frameEl, [l, t, r, b]) {
   const f = sourceRect(video, frameEl);
   if (!f) return null;
-  const [l, t, r, b] = TITLE_BAND;
   const x = Math.max(0, f.x + l * f.width);
   const y = Math.max(0, f.y + t * f.height);
   return cropRect(video, {
     x, y,
-    width: Math.min(video.videoWidth - x, (r - l) * f.width),
+    width: Math.min(video.videoWidth - x, f.x + r * f.width - x),
     height: Math.min(video.videoHeight - y, f.y + b * f.height - y),
   });
 }
@@ -79,36 +93,50 @@ function cropRect(video, r) {
   return canvas;
 }
 
-// Tesseract lit le mieux des caractères d'environ 30 px : on vise une bande de cette hauteur,
-// sans agrandir inutilement un flux déjà en haute définition (chaque pixel en plus coûte du temps OCR).
-const OCR_TARGET_HEIGHT = 180;
 const OCR_MAX_SCALE = 3;
-export const TITLE_TARGET_HEIGHT = 220;
+// Hauteur visée pour le bandeau du nom (~1:1 en 1080p, réduit au-delà).
+export const TITLE_TARGET_HEIGHT = 280;
+
+// Hauteur visée pour la bande du numéro : le numéro y fait alors ~25-30 px, la taille que
+// Tesseract lit le mieux. Une bande plus grande (flux 4K) est RÉDUITE : chaque pixel coûte du temps OCR.
+export const BAND_TARGET_HEIGHT = 400;
+// Demi-côté de la fenêtre du seuil adaptatif et écart minimal au fond local (sur 255).
+const ADAPT_RADIUS = 15;
+// Numéro : écart modéré (petits caractères fins). Nom : écart fort, qui efface les reflets
+// holo et la texture du fond. Réglés en rejouant 32 images iPhone (voir `binarize`).
+export const BAND_OFFSET = 22;
+export const TITLE_OFFSET = 32;
 
 /**
- * Prépare la zone pour l'OCR : agrandissement adapté, niveaux de gris et contraste
- * automatique (étirement entre les percentiles 2 % et 98 %, robuste aux reflets et à la pénombre).
+ * Noir et blanc par seuil ADAPTATIF : un pixel est du texte s'il est nettement plus sombre
+ * (ou plus clair, avec `light`) que la moyenne de son voisinage. Le bas d'une carte mêle
+ * fonds clairs, bandeaux gris et bord jaune : un seuil global, ou le gris brut, fait sauter
+ * la ligne du numéro à Tesseract. Rejoué sur 32 images iPhone de cartes : le numéro est lu
+ * sur 18 (1 avant, avec la petite zone en gris), le nom sur 28 (4 avant).
  * Le « gris » est le canal le plus clair de chaque pixel, pas la luminance : sur une carte
- * Feu, le texte gris foncé et le fond rouge ont presque la même luminance et le texte
- * disparaît, alors que le canal max rend le fond clair et laisse le texte sombre.
- * Renvoie la version normale et la version inversée (texte clair sur fond sombre),
- * toutes deux tirées de la MÊME image — l'ancienne version recapturait une deuxième image.
+ * Feu, le texte gris foncé et le fond rouge ont presque la même luminance, alors que le
+ * canal max rend le fond clair et laisse le texte sombre. Il est étiré entre les percentiles 2-98 %.
+ * Moyenne locale par image intégrale : coût linéaire quel que soit le rayon.
  */
-export function preprocess(src, targetHeight = OCR_TARGET_HEIGHT) {
-  const scale = Math.min(OCR_MAX_SCALE, Math.max(1, targetHeight / src.height));
+export function binarize(src, { targetHeight = BAND_TARGET_HEIGHT, offset = BAND_OFFSET, light = false } = {}) {
+  const scale = Math.min(OCR_MAX_SCALE, Math.max(0.5, targetHeight / src.height));
   const width = Math.round(src.width * scale);
   const height = Math.round(src.height * scale);
-
-  const normal = document.createElement('canvas');
-  normal.width = width;
-  normal.height = height;
-  const ctx = normal.getContext('2d', { willReadFrequently: true });
+  const out = document.createElement('canvas');
+  out.width = width;
+  out.height = height;
+  const ctx = out.getContext('2d', { willReadFrequently: true });
   ctx.imageSmoothingEnabled = true;
   ctx.imageSmoothingQuality = 'high';
   ctx.drawImage(src, 0, 0, width, height);
   const img = ctx.getImageData(0, 0, width, height);
-  const d = img.data;
+  binarizePixels(img.data, width, height, offset, light);
+  ctx.putImageData(img, 0, 0);
+  return out;
+}
 
+/** Cœur pur de `binarize` (RGBA en place) : testable sans canvas. */
+export function binarizePixels(d, width, height, offset = BAND_OFFSET, light = false) {
   const n = width * height;
   const gray = new Uint8ClampedArray(n);
   const hist = new Uint32Array(256);
@@ -117,23 +145,34 @@ export function preprocess(src, targetHeight = OCR_TARGET_HEIGHT) {
     hist[gray[p]] += 1;
   }
   const [lo, hi] = percentiles(hist, n, 0.02, 0.98);
-  const span = Math.max(32, hi - lo); // un fond uni ne doit pas être amplifié en bruit
-
-  const inv = new ImageData(width, height);
-  const e = inv.data;
-  for (let p = 0, i = 0; p < n; p += 1, i += 4) {
-    const c = Math.max(0, Math.min(255, Math.round(((gray[p] - lo) * 255) / span)));
-    d[i] = d[i + 1] = d[i + 2] = c;
-    e[i] = e[i + 1] = e[i + 2] = 255 - c;
-    e[i + 3] = 255;
+  const span = Math.max(32, hi - lo);
+  const w1 = width + 1;
+  const integral = new Float64Array(w1 * (height + 1));
+  for (let y = 0; y < height; y += 1) {
+    let row = 0;
+    for (let x = 0; x < width; x += 1) {
+      const p = y * width + x;
+      gray[p] = Math.max(0, Math.min(255, Math.round(((gray[p] - lo) * 255) / span)));
+      row += gray[p];
+      integral[(y + 1) * w1 + x + 1] = integral[y * w1 + x + 1] + row;
+    }
   }
-  ctx.putImageData(img, 0, 0);
-
-  const inverted = document.createElement('canvas');
-  inverted.width = width;
-  inverted.height = height;
-  inverted.getContext('2d').putImageData(inv, 0, 0);
-  return { normal, inverted };
+  const r = ADAPT_RADIUS;
+  for (let y = 0; y < height; y += 1) {
+    const y0 = Math.max(0, y - r);
+    const y1 = Math.min(height, y + r + 1);
+    for (let x = 0; x < width; x += 1) {
+      const x0 = Math.max(0, x - r);
+      const x1 = Math.min(width, x + r + 1);
+      const sum = integral[y1 * w1 + x1] - integral[y0 * w1 + x1] - integral[y1 * w1 + x0] + integral[y0 * w1 + x0];
+      const mean = sum / ((x1 - x0) * (y1 - y0));
+      const p = y * width + x;
+      const ink = light ? gray[p] > mean + offset : gray[p] < mean - offset;
+      const i = p * 4;
+      d[i] = d[i + 1] = d[i + 2] = ink ? 0 : 255;
+      d[i + 3] = 255;
+    }
+  }
 }
 
 function percentiles(hist, total, low, high) {
@@ -239,5 +278,49 @@ export function matchPokemonName(text, index = nameIndex) {
       if (name.length >= 6 && withinOneEdit(k, name)) return hit;
     }
   }
-  return null;
+  // Début du nom avalé par le bandeau « BASE » / « NIVEAU 1 » : « plouf » pour « Tiplouf ».
+  // On accepte le nom le plus court qui CONTIENT le mot lu (au plus 3 lettres de plus),
+  // s'il n'a pas d'égal : « plouf » → Tiplouf (+2) plutôt que Prinplouf (+4).
+  let sub = null;
+  for (const k of new Set(words)) {
+    if (k.length < 5) continue;
+    for (const [name, hit] of index) {
+      const extra = name.length - k.length;
+      if (extra < 1 || extra > 3 || !name.includes(k)) continue;
+      if (!sub || extra < sub.extra || (extra === sub.extra && k.length > sub.k.length)) sub = { k, extra, hit, tie: false };
+      else if (extra === sub.extra && k.length === sub.k.length && hit.en !== sub.hit.en) sub.tie = true;
+    }
+  }
+  return sub && !sub.tie ? sub.hit : null;
 }
+
+/**
+ * Parmi les cartes d'un Pokémon, celle dont le numéro ET la taille du set apparaissent
+ * dans le texte lu en bas de la carte, même mal découpé (« 27 108 », « 27/1O8 » corrigé,
+ * barre oblique perdue). Les nombres sont comparés sans zéros de tête.
+ * Renvoie la carte si elle est la seule à correspondre, sinon null.
+ */
+export function pickCardByDigits(cards, texts) {
+  const nums = new Set();
+  for (const text of texts) {
+    if (!text) continue;
+    for (const m of fixLookalikeRuns(text).matchAll(/\d{1,3}/g)) nums.add(String(parseInt(m[0], 10)));
+    // « 27108 » : barre lue comme rien — toutes les coupes possibles.
+    for (const m of text.matchAll(/\d{3,6}/g)) {
+      for (let i = 1; i < m[0].length; i += 1) {
+        nums.add(`${parseInt(m[0].slice(0, i), 10)}|${parseInt(m[0].slice(i), 10)}`);
+      }
+    }
+  }
+  const hits = cards.filter((c) => {
+    const num = String(parseInt(c.number, 10));
+    const total = String(c.set?.printedTotal ?? '');
+    if (!/^\d+$/.test(String(c.number)) || !total) return false;
+    return (nums.has(num) && nums.has(total)) || nums.has(`${num}|${total}`);
+  });
+  return hits.length === 1 ? hits[0] : null;
+}
+
+// Corrige les sosies de chiffres uniquement collés à un vrai chiffre (« 1O8 » → « 108 »),
+// pour ne pas transformer chaque « o » du texte en zéro.
+const fixLookalikeRuns = (text) => text.replace(/[0-9OoDQIli|SBZ]*\d[0-9OoDQIli|SBZ]*/g, fixDigits);

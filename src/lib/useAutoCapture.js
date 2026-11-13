@@ -12,7 +12,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { sourceRect } from './scan';
 import {
   assessFrame, CLEARED_SAMPLES_REQUIRED, HINT_AFTER_SAMPLES, hintFor, isSettled,
-  PATIENCE_SAMPLES, QUALITY_SAMPLE_WIDTH, STABLE_SAMPLES_REQUIRED,
+  nextSharpnessPeak, PATIENCE_SAMPLES, QUALITY_SAMPLE_WIDTH, STABLE_SAMPLES_REQUIRED,
 } from './quality';
 
 const SAMPLE_INTERVAL_MS = 100;
@@ -42,7 +42,7 @@ export function useAutoCapture({ videoRef, frameRef, enabled, busy, onStable }) 
   const live = useRef({ enabled, busy, onStable });
   live.current = { enabled, busy, onStable };
 
-  const state = useRef({ prev: null, armed: true, stable: 0, settled: 0, cleared: 0, problem: 'ok', problemCount: 0 });
+  const state = useRef({ prev: null, peak: 0, armed: true, stable: 0, settled: 0, cleared: 0, problem: 'ok', problemCount: 0 });
 
   const resetStreaks = useCallback(() => {
     const s = state.current;
@@ -92,6 +92,7 @@ export function useAutoCapture({ videoRef, frameRef, enabled, busy, onStable }) 
       ctx.drawImage(video, r.x, r.y, r.width, r.height, 0, 0, width, height);
       const sample = assessFrame(s.prev, ctx.getImageData(0, 0, width, height));
       s.prev = sample.gray;
+      s.peak = nextSharpnessPeak(s.peak, sample);
       const { verdict } = sample;
 
       if (!s.armed) {
@@ -110,7 +111,7 @@ export function useAutoCapture({ videoRef, frameRef, enabled, busy, onStable }) 
       }
 
       s.stable = verdict === 'ok' ? s.stable + 1 : 0;
-      s.settled = isSettled(sample) ? s.settled + 1 : 0;
+      s.settled = isSettled(sample, s.peak) ? s.settled + 1 : 0;
       if (s.stable >= STABLE_SAMPLES_REQUIRED || s.settled >= PATIENCE_SAMPLES) {
         disarm();
         live.current.onStable();

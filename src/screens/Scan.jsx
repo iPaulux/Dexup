@@ -4,8 +4,8 @@ import { CameraOff, Keyboard, Layers, ScanLine, SwitchCamera, X } from 'lucide-r
 import { useCollection } from '../store/collection';
 import { searchCards } from '../lib/tcg';
 import {
-  buildNameIndex, cropTitle, cropZone, extractCardNumber, getOcrWorker, isCardNumber, matchPokemonName,
-  preprocess, TITLE_TARGET_HEIGHT, warmOcr,
+  binarize, buildNameIndex, cropNumberBand, cropTitle, extractCardNumber, getOcrWorker, isCardNumber,
+  matchPokemonName, pickCardByDigits, TITLE_OFFSET, TITLE_TARGET_HEIGHT, warmOcr,
 } from '../lib/scan';
 import { getFrToEnMap, resolveSearchTerm } from '../utils/pokemonNames';
 import { useAutoCapture } from '../lib/useAutoCapture';
@@ -16,10 +16,15 @@ const BARCODE_OK = typeof window !== 'undefined' && 'BarcodeDetector' in window;
 // Les codes-barres n'ont pas besoin de 60 lectures par seconde : 4 suffisent et libèrent le processeur pour l'OCR.
 const BARCODE_INTERVAL_MS = 250;
 // Lectures automatiques ratées d'affilée avant d'afficher un conseil et d'attendre que la carte bouge.
-const AUTO_MAX_FAILURES = 4;
+const AUTO_MAX_FAILURES = 8;
 // Pause entre deux lectures automatiques ratées : sans carte (un visage, un bureau),
 // l'OCR ne tourne pas en continu.
-const AUTO_RETRY_DELAY_MS = 400;
+const AUTO_RETRY_DELAY_MS = 150;
+// Nom lu mais pas encore le numéro exact : on relit encore un peu avant de montrer la liste
+// de toutes les cartes de ce Pokémon (chaque lecture ajoute son texte aux indices).
+const NAME_ONLY_ATTEMPTS = 3;
+// Textes du bas de carte gardés d'une lecture à l'autre pour retrouver le numéro par morceaux.
+const KEPT_TEXTS = 4;
 
 // Résultats déjà obtenus pendant la session : rescanner la même carte ne refait pas d'appel réseau.
 const searchCache = new Map();
@@ -30,6 +35,12 @@ async function cachedSearch(key, fetcher) {
   searchCache.set(key, cards);
   return cards;
 }
+// « 027/108 » lu correspond-il à cette carte (numéro et taille du set, sans zéros de tête) ?
+function sameNumber(card, read) {
+  const [num, total] = read.split('/').map((n) => parseInt(n, 10));
+  return parseInt(card.number, 10) === num && Number(card.set?.printedTotal) === total;
+}
+
 const CORNERS = [
   { top: 0, left: 0, borderTopWidth: 3, borderLeftWidth: 3, borderTopLeftRadius: 16 },
   { top: 0, right: 0, borderTopWidth: 3, borderRightWidth: 3, borderTopRightRadius: 16 },
@@ -42,7 +53,6 @@ export default function Scan() {
   const { openCard, activeCard } = useCollection();
   const videoRef = useRef(null);
   const frameRef = useRef(null);
-  const zoneRef = useRef(null);
   const autoFailures = useRef(0);
   const streamRef = useRef(null);
   const startId = useRef(0);
@@ -57,8 +67,22 @@ export default function Scan() {
   const [searching, setSearching] = useState(false);
   const [sheet, setSheet] = useState(null); // null | 'results' | 'manual'
 
+  // Toutes les cartes d'un Pokémon (nom anglais exact), les plus récentes d'abord.
+  const cardsOfPokemon = useCallback((enName) => cachedSearch(`e:${enName}`, async () => (
+    await searchCards({ exactName: enName, pageSize: 250, orderBy: '-set.releaseDate' })).cards), []);
+
+  // Une carte précise a été reconnue : on ouvre directement sa fiche.
+  const openFound = useCallback((card, query) => {
+    navigator.vibrate?.(30);
+    setResults({ query, cards: [card] });
+    setMessage(null);
+    openCard(card);
+  }, [openCard]);
+
   // `enName` : nom anglais déjà connu (lu sur la carte) ; sinon un nom saisi est traduit FR→EN.
-  const runSearch = useCallback(async (raw, enName) => {
+  // `strict` (lecture automatique) : un numéro sans carte correspondante dans un set de cette
+  // taille est sans doute mal lu — on n'élargit pas la recherche, on renvoie false pour relire.
+  const runSearch = useCallback(async (raw, enName, strict = false) => {
     const q = raw.trim();
     if (!q) return;
     setSearching(true);
@@ -68,17 +92,17 @@ export default function Scan() {
       if (isCardNumber(q)) {
         // « 001/165 » : numéro sans zéros de tête + taille du set, ce qui isole presque toujours la bonne carte.
         const [num, total] = q.split('/').map((n) => String(parseInt(n, 10)));
-        cards = await cachedSearch(`n:${num}/${total ?? ''}`, async () => {
+        cards = await cachedSearch(`n:${num}/${total ?? ''}${strict ? '!' : ''}`, async () => {
           let found = total ? (await searchCards({ number: num, printedTotal: total, pageSize: 30 })).cards : [];
-          if (!found.length) found = (await searchCards({ number: num, pageSize: 30 })).cards;
+          if (!found.length && !strict) found = (await searchCards({ number: num, pageSize: 30 })).cards;
           return found;
         });
+        if (!cards.length && strict) { setSearching(false); return false; }
       } else {
         if (enName) {
           // Nom lu sur la carte : ce Pokémon exactement (pas ses formes d'Alola, etc.),
           // les plus récentes d'abord — c'est le plus souvent la carte qu'on vient d'ouvrir.
-          cards = await cachedSearch(`e:${enName}`, async () => (
-            await searchCards({ exactName: enName, pageSize: 60, orderBy: '-set.releaseDate' })).cards);
+          cards = await cardsOfPokemon(enName);
         } else {
           const name = await resolveSearchTerm(q);
           cards = await cachedSearch(`q:${name.toLowerCase()}`, async () => (await searchCards({ name, pageSize: 20 })).cards);
@@ -97,7 +121,8 @@ export default function Scan() {
       setMessage('Erreur réseau. Vérifie ta connexion.');
     }
     setSearching(false);
-  }, [openCard]);
+    return true;
+  }, [openCard, cardsOfPokemon]);
 
   const busy = ocr !== 'idle' || searching;
   const paused = cam !== 'active' || busy || sheet !== null || !!activeCard;
@@ -132,12 +157,19 @@ export default function Scan() {
     setCam('starting');
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: mode, width: { ideal: 1920 }, height: { ideal: 1080 } },
+        // 1440p : le petit numéro de collection gagne ~33 % de pixels par rapport au 1080p.
+        // Les découpes sont ramenées à une taille fixe avant l'OCR : son coût ne change pas.
+        video: { facingMode: mode, width: { ideal: 2560 }, height: { ideal: 1440 } },
         audio: false,
       });
       // L'écran a été quitté (ou la caméra relancée) pendant la demande d'autorisation.
       if (id !== startId.current) { stream.getTracks().forEach((t) => t.stop()); return; }
       streamRef.current = stream;
+      // Mise au point continue quand le navigateur la propose (la carte bouge, la distance aussi).
+      const track = stream.getVideoTracks()[0];
+      if (track?.getCapabilities?.().focusMode?.includes('continuous')) {
+        track.applyConstraints({ advanced: [{ focusMode: 'continuous' }] }).catch(() => {});
+      }
       videoRef.current.srcObject = stream;
       videoRef.current.play().catch(() => {});
       setCam('active');
@@ -184,51 +216,82 @@ export default function Scan() {
     startCamera(next);
   };
 
-  // Lit la carte : d'abord le numéro (zone en pointillés), qui désigne une impression précise ;
-  // s'il est illisible (webcam, reflet), le nom en haut de la carte, qui est bien plus gros.
+  // Indices accumulés sur la carte en cours : textes du bas de carte et nom déjà lu.
+  // Remis à zéro dès qu'un résultat est affiché ou qu'une autre carte apparaît.
+  const clues = useRef({ texts: [], name: null, nameReads: 0 });
+
+  // Lit la carte : le bas de la carte (numéro) et le haut (nom) en parallèle, sur deux moteurs.
+  // Le numéro désigne une impression précise ; le nom, bien plus gros, se lit presque toujours.
+  // Les deux ensemble ouvrent directement la bonne carte : parmi les cartes de ce Pokémon,
+  // celle dont le numéro et la taille du set apparaissent dans le texte du bas.
   // `auto` : déclenché par l'auto-capture, donc discret en cas d'échec et nouvel essai ensuite.
   const readCard = async (auto) => {
     const video = videoRef.current;
     if (cam !== 'active' || ocr !== 'idle' || searching) return;
-    const crop = cropZone(video, zoneRef.current);
+    const band = cropNumberBand(video, frameRef.current);
     const title = cropTitle(video, frameRef.current);
-    if (!crop) { if (auto) rearm(); return; }
+    if (!band) { if (auto) rearm(); return; }
 
     if (!auto) setMessage(null);
     setOcr('loading');
     try {
-      const worker = await getOcrWorker();
+      const [numberWorker, nameWorker] = await Promise.all([getOcrWorker(0), getOcrWorker(1)]);
       setOcr('running');
-      // Version normale puis inversée (texte clair sur fond sombre), tirées de la même image.
-      await worker.setParameters({ tessedit_pageseg_mode: '6' });
-      const { normal, inverted } = preprocess(crop);
-      const t1 = (await worker.recognize(normal)).data.text;
-      let number = extractCardNumber(t1);
-      let t2 = null;
-      if (!number) { t2 = (await worker.recognize(inverted)).data.text; number = extractCardNumber(t2); }
-
-      let name = null;
-      let t3 = null;
-      if (!number && title) {
-        // Mode « texte épars » : le nom partage sa ligne avec le stade et les PV.
-        await worker.setParameters({ tessedit_pageseg_mode: '11' });
-        t3 = (await worker.recognize(preprocess(title, TITLE_TARGET_HEIGHT).normal)).data.text;
-        name = matchPokemonName(t3);
-      }
+      // Une lecture ratée sur trois cherche du texte clair sur fond sombre (cartes sombres, full art).
+      const light = autoFailures.current % 3 === 2;
+      const bandImg = binarize(band, { light });
+      const titleImg = title && binarize(title, { targetHeight: TITLE_TARGET_HEIGHT, offset: TITLE_OFFSET });
+      const [t1, t3] = await Promise.all([
+        numberWorker.recognize(bandImg).then((r) => r.data.text),
+        titleImg ? nameWorker.recognize(titleImg).then((r) => r.data.text) : null,
+      ]);
+      const number = extractCardNumber(t1);
+      const name = t3 ? matchPokemonName(t3) : null;
       setOcr('idle');
-      if (number) {
-        autoFailures.current = 0;
+
+      const c = clues.current;
+      // Un autre nom : c'est une autre carte, les anciens indices ne valent plus.
+      if (name && c.name && c.name.en !== name.en) clues.current = { texts: [], name: null, nameReads: 0 };
+      const cl = clues.current;
+      cl.texts = [t1, ...cl.texts].slice(0, KEPT_TEXTS);
+      if (name) {
+        cl.nameReads += 1;
+        cl.name = name;
+      }
+      const known = name ?? cl.name;
+      const done = () => { autoFailures.current = 0; clues.current = { texts: [], name: null, nameReads: 0 }; };
+
+      // 1. Nom connu : on cherche la carte exacte parmi celles de ce Pokémon.
+      let nameChecked = false;
+      if (known) {
+        setInput(known.fr);
+        setSearching(true); // pas de nouvelle lecture automatique pendant la requête
+        try {
+          const cards = await cardsOfPokemon(known.en);
+          const exact = (number && cards.find((card) => sameNumber(card, number))) || pickCardByDigits(cards, cl.texts);
+          if (exact) { setSearching(false); done(); openFound(exact, known.fr); return; }
+          nameChecked = !!name;
+        } catch (_) { /* réseau : on retombe sur la recherche classique */ }
+        setSearching(false);
+      }
+      // 2. Numéro lu : recherche par numéro + taille du set (stricte en automatique).
+      // Si le nom vient d'être lu et qu'aucune de ses cartes n'a ce numéro, le numéro est mal lu :
+      // il ouvrirait la carte d'un autre Pokémon.
+      if (number && !(auto && nameChecked)) {
         setInput(number);
-        runSearch(number);
-      } else if (name) {
-        autoFailures.current = 0;
-        setInput(name.fr);
+        if (await runSearch(number, undefined, auto)) { done(); return; }
+      }
+      // 3. Nom seul, relu plusieurs fois sans numéro : la liste des cartes de ce Pokémon.
+      if (known && (!auto || cl.nameReads >= NAME_ONLY_ATTEMPTS || autoFailures.current + 1 >= AUTO_MAX_FAILURES)) {
+        done();
         setMessage(null);
-        runSearch(name.fr, name.en);
-      } else if (auto && ++autoFailures.current < AUTO_MAX_FAILURES) {
+        runSearch(known.fr, known.en);
+        return;
+      }
+      if (auto && ++autoFailures.current < AUTO_MAX_FAILURES) {
         window.setTimeout(rearm, AUTO_RETRY_DELAY_MS);
       } else {
-        autoFailures.current = 0;
+        done();
         setMessage('Carte illisible — rapproche-la, ou saisis son numéro ou son nom.');
       }
     } catch (_) {
@@ -254,7 +317,7 @@ export default function Scan() {
   const hint = message
     ?? (ocr === 'loading' ? 'Préparation de la lecture (première fois)…'
       : ocr === 'running' ? 'Lecture de la carte…'
-        : autoHint || 'Place la carte dans le cadre, numéro dans les pointillés — la lecture est automatique');
+        : autoHint || 'Place la carte dans le cadre — la lecture est automatique');
 
   return (
     <div className="scan">
@@ -274,7 +337,6 @@ export default function Scan() {
             <div className="scan-frame" ref={frameRef}>
               {CORNERS.map((style, i) => <span key={i} className="scan-corner" style={style} />)}
               {!busy && <span className="scan-line" />}
-              <span className="scan-zone" ref={zoneRef} />
             </div>
             <p className="scan-hint" role="status">{hint}</p>
           </>
@@ -298,7 +360,7 @@ export default function Scan() {
         <button className="scan-side" onClick={() => setSheet('manual')}>
           <Keyboard size={22} /> Saisir
         </button>
-        <button className="scan-snap" onClick={snap} disabled={cam !== 'active' || busy} aria-label="Lire le numéro de la carte">
+        <button className="scan-snap" onClick={snap} disabled={cam !== 'active' || busy} aria-label="Lire la carte">
           {busy ? <div className="spinner" /> : <ScanLine size={30} />}
         </button>
         <button className="scan-side" onClick={() => setSheet('results')} disabled={!results.cards.length}>

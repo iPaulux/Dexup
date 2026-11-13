@@ -367,7 +367,6 @@ button.list-row:active, .list-row.tap:active { transform: scale(0.99); }
 .scan-frame { position: relative; height: min(100% - 46px, 118vw); aspect-ratio: 63 / 88; border-radius: 16px; box-shadow: 0 0 0 200vmax rgba(0, 0, 0, 0.55); pointer-events: none; }
 .scan-corner { position: absolute; width: 26px; height: 26px; border: 0 solid #fff; }
 .scan-line { position: absolute; left: 5%; right: 5%; height: 2px; background: var(--signal); box-shadow: 0 0 14px var(--signal); animation: scanLine 2.4s ease-in-out infinite; }
-.scan-zone { position: absolute; left: 5%; right: 5%; bottom: 2.5%; height: 9%; border: 1.5px dashed #fff; border-radius: 6px; }
 .scan-hint { position: relative; z-index: 1; font-family: var(--mono); font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; line-height: 1.5; text-shadow: 0 1px 6px #000; min-height: 30px; display: flex; align-items: center; }
 .scan-state { position: relative; z-index: 1; display: flex; flex-direction: column; align-items: center; gap: 12px; max-width: 300px; }
 .scan-state b { font-family: var(--display); font-weight: 300; font-size: 26px; line-height: 1.15; }

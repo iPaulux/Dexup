@@ -16,11 +16,15 @@ export const QUALITY_SAMPLE_WIDTH = 160;
 /** Variance minimale du laplacien : en dessous, le texte de la carte est flou. */
 export const SHARPNESS_MIN = 35;
 
-/** Différence moyenne maximale entre deux échantillons pour considérer l'image immobile. */
-export const MOTION_MAX = 10;
+/**
+ * Différence moyenne maximale entre deux échantillons pour considérer l'image immobile.
+ * Mesuré sur iPhone, une carte tenue à la main bouge de 18 à 28 en moyenne : 10 ne
+ * déclenchait presque jamais par ce chemin.
+ */
+export const MOTION_MAX = 14;
 
 /** Mouvement toléré pour une carte « posée » tenue à la main (tremblement normal). */
-export const MOTION_SETTLED_MAX = 22;
+export const MOTION_SETTLED_MAX = 24;
 
 /** Détail minimal d'un échantillon posé pour qu'il y ait bien une carte (une table vide est plate). */
 export const PATIENCE_SHARPNESS_MIN = 12;
@@ -34,8 +38,18 @@ export const BRIGHTNESS_MAX = 210;
 /** Échantillons parfaits consécutifs avant déclenchement (~0,2 s à 100 ms). */
 export const STABLE_SAMPLES_REQUIRED = 2;
 
-/** Échantillons « posés » consécutifs après lesquels on déclenche quand même (~0,6 s). */
-export const PATIENCE_SAMPLES = 6;
+/** Échantillons « posés » consécutifs après lesquels on déclenche quand même (~0,3 s). */
+export const PATIENCE_SAMPLES = 3;
+
+/**
+ * Netteté minimale d'un échantillon « posé », relative à la meilleure netteté récente :
+ * le flou de bougé fait chuter la variance du laplacien, alors qu'un seuil absolu dépend
+ * de la carte (une carte chargée est toujours « nette »). On lit l'image nette, pas la floue.
+ */
+export const SETTLED_SHARPNESS_RATIO = 0.7;
+
+/** Décroissance par échantillon de la meilleure netteté retenue (oublie une ancienne carte en ~2 s). */
+export const SHARPNESS_PEAK_DECAY = 0.97;
 
 /** Un problème doit persister ce nombre d'échantillons avant d'afficher un conseil (~0,4 s). */
 export const HINT_AFTER_SAMPLES = 4;
@@ -106,13 +120,20 @@ export function assessFrame(prev, sample) {
   return { verdict: 'ok', gray, motion: moved, sharpness: focus };
 }
 
-/** Échantillon « posé » : bien exposé, à peu près immobile, et avec assez de détail pour être une carte. */
-export function isSettled(result) {
+/**
+ * Échantillon « posé » : bien exposé, à peu près immobile, avec assez de détail pour être
+ * une carte, et presque aussi net que les meilleurs échantillons récents (`peak`).
+ */
+export function isSettled(result, peak = 0) {
   return result.verdict !== 'dark'
     && result.verdict !== 'bright'
     && result.motion <= MOTION_SETTLED_MAX
-    && result.sharpness >= PATIENCE_SHARPNESS_MIN;
+    && result.sharpness >= PATIENCE_SHARPNESS_MIN
+    && result.sharpness >= peak * SETTLED_SHARPNESS_RATIO;
 }
+
+/** Meilleure netteté récente, mise à jour avec un nouvel échantillon. */
+export const nextSharpnessPeak = (peak, result) => Math.max(peak * SHARPNESS_PEAK_DECAY, result.sharpness || 0);
 
 const HINTS = {
   ok: '',
