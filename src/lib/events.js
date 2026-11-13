@@ -1,21 +1,16 @@
 import { getSharedIfFresh, setShared } from '../utils/sharedCache';
 
 // Clé versionnée : changer le suffixe quand la liste ci-dessous est mise à jour, pour ignorer les anciens caches.
-const CONV_KEY = 'fr_conventions_2027';
-const OFFICIAL = 'https://championships.pokemon.com/en-us/events?status=upcoming&region=europe';
+const CONV_KEY = 'collector_events_2027';
 
-// Saison 2026-27 des Championnats Pokémon en Europe — la table partagée Supabase peut la remplacer.
+// Salons et conventions pour collectionneurs (pas les tournois) — la table partagée Supabase peut remplacer cette liste.
 const FALLBACK_EVENTS = [
-  { id: 'eu-frankfurt-2026-09', name: 'Championnat Régional de Francfort', type: 'Régional', city: 'Francfort, Allemagne', date: '2026-09-26', dateEnd: '2026-09-27', url: OFFICIAL },
-  { id: 'eu-nice-2026-10', name: 'Championnat Régional de Nice', type: 'Régional', city: 'Nice, France', venue: 'Palais des Expositions', date: '2026-10-17', dateEnd: '2026-10-18', url: OFFICIAL },
-  { id: 'eu-gdansk-2026-10', name: 'Championnat Régional de Gdańsk', type: 'Régional', city: 'Gdańsk, Pologne', date: '2026-10-31', dateEnd: '2026-11-01', url: OFFICIAL },
-  { id: 'eu-stuttgart-2026-11', name: 'Championnat Régional de Stuttgart', type: 'Régional', city: 'Stuttgart, Allemagne', date: '2026-11-28', dateEnd: '2026-11-29', url: OFFICIAL },
-  { id: 'eu-birmingham-2027-01', name: 'Championnat Régional de Birmingham', type: 'Régional', city: 'Birmingham, Royaume-Uni', date: '2027-01-30', dateEnd: '2027-01-31', url: OFFICIAL },
-  { id: 'eu-euic-2027-02', name: 'Championnats Internationaux Européens', type: 'Internationaux', city: 'Londres, Royaume-Uni', date: '2027-02-19', dateEnd: '2027-02-21', url: OFFICIAL },
-  { id: 'eu-lisbon-2027-04', name: 'Championnat Spécial de Lisbonne', type: 'Événement spécial', city: 'Lisbonne, Portugal', date: '2027-04-10', dateEnd: '2027-04-11', url: OFFICIAL },
-  { id: 'eu-prague-2027-05', name: 'Championnat Régional de Prague', type: 'Régional', city: 'Prague, Tchéquie', date: '2027-05-08', dateEnd: '2027-05-09', url: OFFICIAL },
-  { id: 'eu-utrecht-2027-05', name: "Championnat Régional d'Utrecht", type: 'Régional', city: 'Utrecht, Pays-Bas', date: '2027-05-22', dateEnd: '2027-05-23', url: OFFICIAL },
-  { id: 'eu-bologna-2027-06', name: 'Championnat Spécial de Bologne', type: 'Événement spécial', city: 'Bologne, Italie', date: '2027-06-05', dateEnd: '2027-06-06', url: OFFICIAL },
+  { id: 'royaume-tcg-2026', name: 'Le Royaume du TCG', type: 'Salon', city: 'Villepinte, France', venue: 'Parc des Expositions Paris Nord', date: '2026-04-04', dateEnd: '2026-04-05' },
+  { id: 'paris-card-show-2026', name: 'Paris Card Show', type: 'Salon', city: 'Paris, France', venue: 'Espace Champerret', date: '2026-05-23', dateEnd: '2026-05-24' },
+  { id: 'tcgcon-versailles-2027', name: 'TCGCON Versailles — Pokémon & One Piece', type: 'Salon', city: 'Versailles, France', venue: 'Palais des Congrès', date: '2027-01-10', dateEnd: '2027-01-10', url: 'https://tcgcon.shop/' },
+  { id: 'dortmund-card-show-2027', name: 'Dortmund Card Show', type: 'Salon', city: 'Dortmund, Allemagne', venue: 'Signal Iduna Park', date: '2027-01-23', dateEnd: '2027-01-23', url: 'https://dortmundcardshow.com/' },
+  { id: 'tcg-expo-prague-2027', name: 'TCG Expo Prague', type: 'Salon', city: 'Prague, Tchéquie', venue: 'Parc des expositions', date: '2027-03-20', dateEnd: '2027-03-20', url: 'https://www.zardo.cards/en/tcgexpo' },
+  { id: 'nordic-card-show-2027', name: 'Nordic Card Show × PokeKon', type: 'Convention', city: 'Roskilde, Danemark', venue: 'Roskilde Kongres Center', date: '2027-05-29', dateEnd: '2027-05-30', url: 'https://nordiccardshow.dk/event/nordic-card-show-x-pokekon-2027-may/' },
 ];
 
 export async function loadEvents() {
@@ -39,9 +34,4 @@ export function formatEventDate(iso) {
   return isNaN(d) ? iso : d.toLocaleDateString('fr-FR', { weekday: 'short', day: 'numeric', month: 'long' });
 }
 
-export function eventTagClass(type = '') {
-  if (type.includes('Régional')) return 'tag-sky';
-  if (type.includes('Internationaux')) return 'tag-violet';
-  if (type.includes('Convention')) return 'tag-mint';
-  return 'tag-peach';
-}
+export const eventTagClass = (type = '') => (type.includes('Convention') ? 'tag-mint' : 'tag-violet');

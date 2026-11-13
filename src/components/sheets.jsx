@@ -149,7 +149,7 @@ export function EventsSheet({ onClose }) {
 
   useEffect(() => { loadEvents().then(setEvents); }, []);
 
-  if (!events) return <Sheet title="Événements" onClose={onClose} tall><Loading /></Sheet>;
+  if (!events) return <Sheet title="Conventions" onClose={onClose} tall><Loading /></Sheet>;
 
   const upcoming = events.filter((e) => !isPast(e));
   const past = events.filter(isPast);
@@ -157,13 +157,13 @@ export function EventsSheet({ onClose }) {
   const next = upcoming[0];
 
   return (
-    <Sheet title="Événements" onClose={onClose} tall>
+    <Sheet title="Conventions" onClose={onClose} tall>
       <div className="stack">
-        <p className="tiny dim">France & Europe · {upcoming.length} à venir</p>
+        <p className="tiny dim">Salons de collection · France & Europe · {upcoming.length} à venir</p>
 
         {next && (
           <div className="card-pad" style={{ background: 'var(--ink)', color: '#fff', borderRadius: 'var(--r)' }}>
-            <p className="tiny" style={{ opacity: 0.85, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.6 }}>Prochain événement</p>
+            <p className="tiny" style={{ opacity: 0.85, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.6 }}>Prochain salon</p>
             <p className="h2" style={{ margin: '4px 0' }}>{next.name}</p>
             <p className="small" style={{ opacity: 0.9 }}>
               {formatEventDate(next.date)}{next.dateEnd && next.dateEnd !== next.date ? ` → ${formatEventDate(next.dateEnd)}` : ''} · {next.city}
@@ -196,11 +196,11 @@ export function EventsSheet({ onClose }) {
           );
         })}
 
-        {upcoming.length === 0 && !showPast && <p className="small dim" style={{ textAlign: 'center', padding: 20 }}>Aucun événement à venir pour le moment.</p>}
+        {upcoming.length === 0 && !showPast && <p className="small dim" style={{ textAlign: 'center', padding: 20 }}>Aucun salon annoncé pour le moment.</p>}
 
         {past.length > 0 && (
           <button className="btn btn-ghost btn-sm" onClick={() => setShowPast((v) => !v)}>
-            {showPast ? 'Masquer les événements passés' : `Voir ${plural(past.length, 'événement')} passé${past.length > 1 ? 's' : ''}`}
+            {showPast ? 'Masquer les salons passés' : `Voir ${plural(past.length, 'salon')} passé${past.length > 1 ? 's' : ''}`}
           </button>
         )}
       </div>

@@ -185,6 +185,10 @@ function CardSheetInner({ card }) {
   const rarity = RARITY[c.rarity];
   const cm = full?.cardmarket?.prices;
 
+  // Sans fiche Cardmarket fournie par l'API, on renvoie vers une recherche du nom de la carte.
+  const cardmarketUrl = full?.cardmarket?.url
+    ?? `https://www.cardmarket.com/fr/Pokemon/Products/Search?searchString=${encodeURIComponent(c.name)}`;
+
   const onOwnedClick = () => (grading ? setConfirmRemove(true) : toggleOwned(card.id));
 
   return (
@@ -251,11 +255,9 @@ function CardSheetInner({ card }) {
             <p className="small dim" style={{ textAlign: 'center' }}>Prix non disponible pour cette carte.</p>
           )}
 
-          {full?.cardmarket?.url && (
-            <button className="btn btn-ghost btn-block" onClick={() => openUrl(full.cardmarket.url)}>
-              Voir sur Cardmarket <ExternalLink size={16} />
-            </button>
-          )}
+          <button className="btn btn-ghost btn-block" onClick={() => openUrl(cardmarketUrl)}>
+            {full?.cardmarket?.url ? 'Voir sur Cardmarket' : 'Chercher sur Cardmarket'} <ExternalLink size={16} />
+          </button>
         </div>
       </Sheet>
 

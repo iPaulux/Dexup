@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Check, Minus, Plus, Star, Trophy } from 'lucide-react';
 import { useCollection } from '../store/collection';
 import { getGradingInfo } from '../utils/storage';
@@ -43,10 +43,11 @@ function ToggleButton({ card, isOwned, onToggle, onRemove, inline }) {
 
 function CardTile({ card, caption, onRemove, dim }) {
   const { isOwned, isFav, grading, open, quickToggle } = useCardState(card);
+  const [loaded, setLoaded] = useState(false);
   return (
     <div className={`ctile${isOwned || !dim ? '' : ' is-missing'}`}>
-      <button className="ctile-img" onClick={open} aria-label={`${card.name} — voir la fiche`}>
-        <img src={card.images?.small} alt="" loading="lazy" />
+      <button className={`ctile-img${loaded ? ' is-loaded' : ''}`} onClick={open} aria-label={`${card.name} — voir la fiche`}>
+        <img src={card.images?.small} alt="" loading="lazy" onLoad={() => setLoaded(true)} onError={() => setLoaded(true)} />
         {isFav && <span className="ctile-fav"><Star size={11} fill="currentColor" /></span>}
         {grading && <span className="ctile-grade">{grading.company} {grading.grade}</span>}
       </button>

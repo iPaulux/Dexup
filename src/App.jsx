@@ -88,6 +88,15 @@ function RemoteHydration({ userId }) {
 function Shell({ session }) {
   const [account, setAccount] = useState(false);
   const openAccount = () => setAccount(true);
+  const { pathname } = useLocation();
+  const { closeCard } = useCollection();
+
+  // Une fiche ouverte ne doit pas rester par-dessus la page suivante.
+  useEffect(() => {
+    closeCard();
+    setAccount(false);
+  }, [pathname, closeCard]);
+
   return (
     <div className="app">
       <Sidebar email={session.user?.email} onAccount={openAccount} />

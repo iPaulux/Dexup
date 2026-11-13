@@ -1,4 +1,4 @@
-import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { ChevronLeft, LayoutGrid, Rows3, Search, Star, X } from 'lucide-react';
@@ -16,7 +16,21 @@ export function usePersistedState(key, initial) {
 
 export const plural = (n, word) => `${n} ${word}${n > 1 ? 's' : ''}`;
 
-export function Sheet({ title, onClose, children, footer, tall, dialog, level = 0 }) {
+const SHEET_EXIT_MS = 170;
+
+export function Sheet({ title, onClose: onClosed, children, footer, tall, dialog, level = 0 }) {
+  const [closing, setClosing] = useState(false);
+  const closed = useRef(onClosed);
+  closed.current = onClosed;
+  // La feuille joue son animation de sortie avant de prévenir le parent.
+  const onClose = useCallback(() => setClosing(true), []);
+
+  useEffect(() => {
+    if (!closing) return undefined;
+    const timer = setTimeout(() => closed.current(), SHEET_EXIT_MS);
+    return () => clearTimeout(timer);
+  }, [closing]);
+
   useEffect(() => {
     const onKey = (e) => { if (e.key === 'Escape') onClose(); };
     window.addEventListener('keydown', onKey);
@@ -25,7 +39,7 @@ export function Sheet({ title, onClose, children, footer, tall, dialog, level = 
 
   return createPortal(
     <div
-      className={`sheet-backdrop${dialog ? ' dialog-backdrop' : ''}`}
+      className={`sheet-backdrop${dialog ? ' dialog-backdrop' : ''}${closing ? ' is-closing' : ''}`}
       style={{ zIndex: 900 + level * 10 }}
       onClick={onClose}
     >

@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ArrowUpRight, CalendarDays, Layers, Newspaper, ShoppingBag } from 'lucide-react';
 import { useCollection } from '../store/collection';
@@ -8,6 +8,22 @@ import { formatEuro, isGraded, ownedCountBySet, useSets, useWallet } from '../li
 import Logo from '../components/Logo';
 import { Page, Progress, pct, plural } from '../components/ui';
 import { EventsSheet, NewsSheet, StatsSheet } from '../components/sheets';
+
+// Fait défiler le nombre de 0 jusqu'à sa valeur au premier affichage.
+function useCountUp(target, duration = 600) {
+  const [value, setValue] = useState(0);
+  useEffect(() => {
+    if (!target) { setValue(0); return undefined; }
+    const start = performance.now();
+    let raf = requestAnimationFrame(function step(now) {
+      const t = Math.min(1, (now - start) / duration);
+      setValue(Math.round(target * (1 - (1 - t) ** 3)));
+      if (t < 1) raf = requestAnimationFrame(step);
+    });
+    return () => cancelAnimationFrame(raf);
+  }, [target, duration]);
+  return value;
+}
 
 function SetChip({ set, owned, lang, onClick }) {
   return (
@@ -27,6 +43,7 @@ export default function Home({ onAccount }) {
   const { sets } = useSets();
   const [sheet, setSheet] = useState(null);
   const wallet = useWallet(owned);
+  const shownTotal = useCountUp(Object.keys(owned).length);
 
   const counts = useMemo(() => ownedCountBySet(owned), [owned]);
   const total = Object.keys(owned).length;
@@ -58,7 +75,7 @@ export default function Home({ onAccount }) {
       <button className="hero" onClick={() => setSheet('stats')} aria-label="Voir mes statistiques">
         <span className="hero-go"><ArrowUpRight size={20} /></span>
         <p style={{ fontWeight: 600, opacity: 0.9 }}>Ma collection</p>
-        <p className="hero-num">{total}</p>
+        <p className="hero-num">{shownTotal}</p>
         <p style={{ opacity: 0.9 }}>{total > 1 ? 'cartes possédées' : 'carte possédée'}</p>
         <div className="hero-stats">
           <span className="hero-chip"><b>{Object.keys(counts).length}</b>{Object.keys(counts).length > 1 ? 'sets entamés' : 'set entamé'}</span>
@@ -78,7 +95,7 @@ export default function Home({ onAccount }) {
         </button>
         <button className="tile tile-peach" onClick={() => setSheet('events')}>
           <CalendarDays size={24} />
-          <div><b>Événements</b><span>France & Europe</span></div>
+          <div><b>Conventions</b><span>Salons de collection</span></div>
         </button>
         <button className="tile tile-mint" onClick={() => navigate('/products')}>
           <ShoppingBag size={24} />

@@ -1,87 +1,75 @@
 # Dexup
 
-> Application web progressive (PWA) de suivi de collection de cartes Pokémon — React + Vite + Supabase.
+> Application web progressive (PWA) pour suivre sa collection de cartes Pokémon — React + Vite + Supabase.
+
+Anciennement « PokéCollect ».
 
 ---
 
 ## Fonctionnalités
 
-### Authentification
-- Inscription / connexion par **email + mot de passe** (Supabase Auth)
-- L'application est entièrement privée — inaccessible sans compte
-- Session persistante (reste connecté après fermeture)
-- Page de connexion animée avec logo flottant
+### Accueil
+- Nombre de cartes possédées, sets entamés, cartes gradées et **valeur Cardmarket** de la collection
+- Statistiques détaillées (grading par société, répartition par set)
+- Accès direct à « Mes cartes », aux Actualités, aux Conventions et aux Produits
+- Extensions en cours et dernières sorties
 
-### 📦 Collection (Sets)
-- Toutes les extensions TCG triées par date de sortie
-- **Noms en français** quand la langue FR est active (mapping statique complet)
-- **Tag ID** affiché sur chaque set (ex : `MEW`, `SV01`, `ME2`…)
-- Recherche **en français ou anglais**, également par ID de set
-- Vue **liste** ou **grille** au choix
-- Barre de progression par set (cartes possédées / total)
-- Favoris par set ★
+### Extensions
+- Toutes les extensions TCG, de la plus récente à la plus ancienne
+- **Noms en français** (langue réglable dans « Mon compte » : FR / EN / JA) et code de set (`ME6`, `SV3PT5`…)
+- Recherche en français ou en anglais, ou par code ; filtres Toutes / Entamées / Favorites
+- Vue liste ou grille, barre de progression et favori ★ par extension
 
-### 🃏 Cartes d'un set
-- Grille 3 colonnes avec image de chaque carte
-- Tap → fiche détaillée complète
-- Barre de progression `X / N cartes — XX%`
-- Filtres : Toutes · Possédées · Manquantes
-- Tri correct des numéros : 1, 2, 3… puis SV, TG, GG…
+### Cartes d'une extension
+- Grille de cartes : **un tap sur le « + » ajoute la carte à la collection**, un tap sur l'image ouvre sa fiche
+- Filtres Toutes / Possédées / Manquantes, vue grille ou liste
+- Sets de plus de 250 cartes chargés en entier (pagination de l'API)
 
-### 🔍 Fiche carte
-- Grande image de la carte + rareté abrégée colorée (SAR · AR · HR · RR · UR · SR · ACE…)
-- Artiste, numéro dans le set, ID du set
-- **Prix en temps réel** (Cardmarket + TCGPlayer) via l'API Pokémon TCG
-- Toggle **Ma collection** et **Favoris**
-- Section **Grading** — enregistrer le grade PSA / PCA / CA / CollectAura / CCC / CGC / Beckett + champ libre "Autres"
-- **Ajouter à une liste** personnalisée
-- Lien direct **Cardmarket**
+### Fiche carte
+- Image, rareté, numéro, artiste, extension
+- **Prix Cardmarket** (tendance, moyennes 7 j / 30 j) via l'API Pokémon TCG ; le lien Cardmarket reste disponible même quand l'API n'a pas de prix
+- Ajout à la collection, favori ★, ajout à une liste
+- **Grading** : PSA / PCA / CA / CollectAura / CCC / CGC / Beckett ou société libre
+- Se ferme toute seule quand on change de page
 
-### 🔍 Recherche
-- Recherche par nom en **français ou anglais** (`Salamèche` → Charmander, insensible aux accents)
-- 1 025 Pokémon couverts avec indication 🔄 quand le nom a été traduit
-- Filtres par rareté : Commune · Peu Commune · Rare · Rare Holo · EX / GX / V · Ultra Rare · Promo
-- Combinaison nom + rareté possible
+### Recherche
+- Par nom en **français ou en anglais** (`Salamèche` → Charmander, insensible aux accents)
+- Filtre par rareté, résultats paginés (« Voir plus »)
 
-### 📷 Scan
-- Accès caméra avec cadre de scan animé (ligne rouge)
+### Scanner
+- Caméra en **plein écran**, commandes en bas, résultats dans une feuille par-dessus la caméra
 - **Scan automatique** : la lecture se déclenche dès que la carte est nette, immobile et bien éclairée (conseils « Ne bouge plus », « Plus de lumière », « Trop de reflets »), puis attend que la carte change avant de relire
 - OCR du numéro (`025/193`) avec correction des caractères ambigus (O→0, l→1…) et contraste automatique
 - **Il suffit de passer la carte** : pas de zone à viser. Le bas de la carte (numéro à gauche ou à droite selon l'époque) et le nom en haut sont lus en parallèle ; le nom (« Goupix », « Tiplouf ») + les chiffres lus ouvrent directement la bonne carte. Si seul le nom est lisible (webcam, reflet), les cartes de ce Pokémon sont proposées des plus récentes aux plus anciennes
 - **BarcodeDetector** natif (Chrome / Safari) pour détecter QR codes et codes-barres automatiquement
 - Recherche manuelle par numéro de carte (ex : `025`, `163/193`)
-- Résultats en grille cliquables → fiche détaillée
+- Les PV et les noms d'attaques lus départagent les cartes d'un même Pokémon ; si une carte se détache, sa fiche s'ouvre directement
 
-### 📋 Mes Listes
-- **Liste "Ma collection" épinglée** — non supprimable, affiche toutes les cartes possédées triées par date de sortie, avec icône Pokédex
-- **Liste "Mes cartes gradées" épinglée** — non supprimable, toutes les cartes gradées regroupées par société (sections déroulantes), icône Baie Oran
-- Créer autant de listes que souhaité (wishlist, échanges, master set…)
-- Chaque liste dispose d'une **icône pokéball** au choix : Pokéball, Super Ball, Hyper Ball, Master Ball, Prémium, Guérison, Sombre, Chrono
-- Renommer et changer l'icône via la modale d'édition ou le bouton dans le header
-- Supprimer une liste (confirmation)
-- Barre de progression possédées / total par liste
-- Détail : vue grille ou liste, filtres Toutes / Possédées / Manquantes
+### Classeur
+- **Listes** : « Ma collection » (cartes possédées, groupées par extension) et « Cartes gradées » (par société) toujours présentes, plus autant de listes personnelles que souhaité
+- Chaque liste a son icône : Poké, Super, Hyper, Master, Honor, Soin, Sombre ou Chrono Ball
+- Renommer, changer l'icône, retirer des cartes, supprimer — depuis le menu « ⋯ »
+- **Favoris** : cartes, extensions et produits
 
-### ★ Favoris
-- Sets, cartes **et produits** favoris regroupés dans un onglet dédié
-- Catégories déroulantes (Sets / Cartes / Produits) avec compteurs
+### Produits
+- Catalogue de produits scellés (boosters, displays, ETB, tins, coffrets, decks) avec prix indicatifs Cardmarket
+- Marquer un produit comme **possédé**, filtre « Possédés », favoris ★
+- Lien Cardmarket et accès aux cartes de l'extension
 
-### 🛍️ Produits
-- Catalogue de produits TCG scellés (boosters, ETB, displays…) avec filtres par catégorie
-- Images réelles des produits (visuels booster / ETB depuis pokemon.com et Bulbapedia)
-- Système de favoris ★ synchronisé
-- Lien direct vers Cardmarket pour chaque produit
+### Actualités et conventions
+- **Actualités TCG** : flux RSS de pokemonblog.com (catégorie TCG) relayé par une fonction Netlify
+- **Conventions** : salons et conventions pour collectionneurs en France et en Europe (pas les tournois compétitifs)
+- Cache partagé 24 h dans Supabase
 
-### 📰 Actualités & Événements
-- **Actualités TCG** — flux en temps réel depuis r/PokemonTCG (posts populaires) avec thumbnails, domaine source et scores ; en production : articles RSS depuis PokéBeach / PokeGuardian / Limitless TCG via Netlify Function
-- **Conventions FR** — calendrier des événements Pokémon TCG français et européens (Régionaux, Internationaux, Japan Expo…), mis à jour depuis Supabase sans redéploiement
-- Cache serveur partagé 24h (`pokecollect_shared`) pour des chargements instantanés
+### Compte et synchronisation
+- Inscription / connexion par email + mot de passe (Supabase Auth) ; l'app est privée
+- Collection, favoris, listes et produits possédés **synchronisés sur Supabase**, lisibles hors ligne grâce à la base locale
+- « Forcer la synchronisation » dans « Mon compte »
 
-### ☁ Sync serveur
-- Toutes les données utilisateur (collection, favoris, listes) sont **synchronisées sur Supabase**
-- Les données survivent au vidage du cache navigateur
-- Accessibles depuis n'importe quel appareil connecté avec le même compte
-- Bouton "Forcer la sync" dans le menu compte pour pousser manuellement les données
+### Interface
+- Thème clair monochrome : grille de points, titres en serif fin, libellés en monospace, une seule couleur d'accent (le violet du logo)
+- Navigation à 5 entrées : Accueil · Extensions · Scanner · Recherche · Classeur (barre flottante sur mobile, barre latérale sur ordinateur)
+- Animations légères : entrées en cascade, feuilles qui glissent, compteurs ; désactivées si le système demande moins d'animations
 
 ---
 
@@ -89,44 +77,54 @@
 
 ```
 src/
-├── App.jsx                     # Routing + Header + BottomTabs + Auth gate
+├── App.jsx                 # Session, routes, barre d'onglets / barre latérale
 ├── main.jsx
+├── styles.css              # Design system (tokens, composants, animations)
 ├── screens/
-│   ├── SetsScreen.jsx          # Extensions (liste/grille, noms FR, tags) + blocs Actualités/Conventions
-│   ├── CardsScreen.jsx         # Cartes d'un set
-│   ├── SearchScreen.jsx        # Recherche nom + rareté
-│   ├── ScanScreen.jsx          # Scanner une carte (caméra + numéro)
-│   ├── ListsScreen.jsx         # Listes épinglées (Collection, Gradées) + listes utilisateur
-│   ├── FavoritesScreen.jsx     # Favoris sets + cartes + produits (sections déroulantes)
-│   ├── ProductsScreen.jsx      # Catalogue produits scellés (images, favoris, Cardmarket)
-│   ├── PokedexListScreen.jsx   # Vue "Ma collection" triée par date de sortie
-│   ├── GradedListScreen.jsx    # Vue "Mes cartes gradées" groupées par société
-│   └── ListDetailScreen.jsx    # Détail d'une liste personnalisée
+│   ├── Home.jsx            # Accueil : chiffres clés, raccourcis, extensions en cours
+│   ├── Sets.jsx            # Liste des extensions
+│   ├── SetDetail.jsx       # Cartes d'une extension
+│   ├── Search.jsx          # Recherche par nom + rareté
+│   ├── Scan.jsx            # Scanner plein écran
+│   ├── Binder.jsx          # Classeur : listes + favoris
+│   ├── Collection.jsx      # « Ma collection » et « Cartes gradées »
+│   ├── ListDetail.jsx      # Détail d'une liste personnelle
+│   └── Products.jsx        # Catalogue de produits scellés
 ├── components/
-│   ├── AuthScreen.jsx          # Page de connexion / inscription
-│   ├── AccountModal.jsx        # Menu compte (sync, déconnexion)
-│   ├── SplashScreen.jsx        # Écran de démarrage animé
-│   ├── CardDetailModal.jsx     # Fiche carte (prix, rareté, grading PSA/PCA/CA/COL/CCC/CGC/BEC/Autres, listes)
-│   ├── AddToListModal.jsx      # Bottom sheet "Ajouter à une liste"
-│   ├── PokeBallPicker.jsx      # Sélecteur d'icône pokéball (SVG inline)
-│   ├── ArticlesModal.jsx       # Bottom sheet actualités TCG (RSS prod / Reddit fallback)
-│   ├── ConventionsModal.jsx    # Bottom sheet événements Pokémon TCG FR/EU
-│   └── rn-web.jsx              # Shim React Native → DOM (View, Text, FlatList…)
-├── utils/
-│   ├── supabase.js             # Client Supabase + helpers auth (signIn, signUp, signOut)
-│   ├── persist.js              # Stockage double couche : SQLite local + Supabase cloud
-│   ├── db.js                   # Base SQLite locale (sql.js + IndexedDB)
-│   ├── storage.js              # Cartes possédées, favoris, grading
-│   ├── lists.js                # Listes personnalisées (CRUD)
-│   ├── cache.js                # Cache API 24h (SQLite local)
-│   ├── sharedCache.js          # Cache partagé Supabase (actualités, conventions) TTL 24h
-│   ├── setNames.js             # Noms FR↔EN des sets + filtrage
-│   ├── pokemonNames.js         # Traduction FR→EN des noms Pokémon (PokeAPI GraphQL)
-│   ├── theme.js                # Polices et couleurs globales
-│   └── LanguageContext.jsx     # Contexte langue EN / FR / JA
-└── netlify/
-    └── functions/
-        └── fetch-news.js       # Proxy RSS serveur (PokéBeach / PokeGuardian / Limitless TCG)
+│   ├── ui.jsx              # Feuilles, champs, pastilles, états vides, page défilante
+│   ├── cards.jsx           # Tuiles et lignes de cartes (grille / liste)
+│   ├── CardSheet.jsx       # Fiche carte, grading, ajout à une liste
+│   ├── sheets.jsx          # Statistiques, actualités, conventions, compte, édition de liste
+│   ├── PokeBall.jsx        # Icônes de liste
+│   ├── Logo.jsx            # Logo
+│   └── Auth.jsx            # Connexion / inscription, écran de démarrage
+├── store/
+│   └── collection.jsx      # État partagé : cartes possédées, favoris, listes, fiche ouverte
+├── lib/
+│   ├── tcg.js              # Accès à l'API cartes (sets, cartes, recherche, valeur)
+│   ├── scan.js             # Lecture d'une carte (OCR) et classement des candidats
+│   ├── quality.js          # Mesure de netteté / exposition d'une image
+│   ├── useAutoCapture.js   # Déclenchement automatique du scan
+│   ├── news.js             # Actualités
+│   └── events.js           # Conventions
+├── utils/                  # Couche données
+│   ├── supabase.js         # Client Supabase + authentification
+│   ├── persist.js          # SQLite local + synchronisation Supabase
+│   ├── db.js               # Base SQLite locale (sql.js + IndexedDB)
+│   ├── storage.js          # Cartes et produits possédés, favoris, grading
+│   ├── lists.js            # Listes personnelles
+│   ├── cache.js            # Cache local de l'API
+│   ├── sharedCache.js      # Cache partagé Supabase
+│   ├── api.js              # URL de l'API (directe en dev, proxy en production)
+│   ├── setNames.js         # Noms FR ↔ EN des extensions
+│   ├── pokemonNames.js     # Noms FR → EN des Pokémon
+│   └── LanguageContext.jsx # Langue des extensions
+└── data/
+    └── products.js         # Catalogue de produits
+
+netlify/functions/
+├── pokemon-api.js          # Proxy vers api.pokemontcg.io (avec nouvelles tentatives)
+└── fetch-news.js           # Relais du flux RSS d'actualités
 ```
 
 ---
@@ -135,24 +133,22 @@ src/
 
 | Outil | Rôle |
 |-------|------|
-| React 19 | UI |
-| Vite 6 | Build + dev server |
-| React Router DOM 7 | Navigation (HashRouter) |
-| Supabase JS 2 | Auth + base de données cloud |
-| sql.js 1.12 | SQLite dans le navigateur (IndexedDB) |
-| Lucide React | Icônes SVG |
-| vite-plugin-pwa | Service Worker + manifest PWA |
-
----
+| React 19 | Interface |
+| Vite 6 | Build + serveur de développement |
+| React Router 7 | Navigation (HashRouter) |
+| Supabase JS 2 | Authentification + base de données |
+| sql.js | SQLite dans le navigateur (IndexedDB) |
+| Tesseract.js | Lecture des cartes au scan (OCR) |
+| Lucide React | Icônes |
+| vite-plugin-pwa | Service worker + manifeste |
 
 ## APIs utilisées
 
 | API | Usage |
 |-----|-------|
-| [Pokémon TCG API](https://pokemontcg.io/) `v2` | Sets, cartes, images, prix Cardmarket / TCGPlayer |
-| [PokeAPI GraphQL](https://beta.pokeapi.co/graphql/v1beta) | Noms FR→EN des 1 025 Pokémon |
-| [Reddit JSON API](https://www.reddit.com/r/PokemonTCG/hot.json) | Actualités TCG (fallback CORS natif) |
-| PokéBeach / PokeGuardian / Limitless TCG RSS | Actualités TCG (via Netlify Function en production) |
+| [Pokémon TCG API](https://pokemontcg.io/) v2 | Extensions, cartes, images, prix Cardmarket |
+| [PokeAPI GraphQL](https://graphql.pokeapi.co/v1beta2) | Noms français → anglais des Pokémon |
+| Flux RSS pokemonblog.com | Actualités TCG (via fonction Netlify) |
 
 ---
 
@@ -167,8 +163,8 @@ Seules les données utilisateur sont synchronisées. Le cache API reste local.
 
 | Table Supabase | Rôle |
 |---|---|
-| `pokecollect_data` | Données par utilisateur (collection, favoris, listes) — RLS user-scoped |
-| `pokecollect_shared` | Cache partagé global (actualités TCG, conventions FR) — lecture publique |
+| `pokecollect_data` | Données par utilisateur (collection, favoris, listes, produits possédés) — RLS user-scoped |
+| `pokecollect_shared` | Cache partagé global (sets, cartes, actualités, conventions) — lecture publique |
 
 `pokecollect_data` : RLS activé — chaque utilisateur n'accède qu'à ses propres données.  
 `pokecollect_shared` : lecture publique (anon), écriture réservée aux utilisateurs authentifiés.
@@ -225,7 +221,9 @@ create policy "shared_write"
   with check (auth.role() = 'authenticated');
 ```
 
-> Les conventions France peuvent être mises à jour directement dans la table `pokecollect_shared` via le dashboard Supabase (clé `fr_conventions`, valeur JSON du tableau d'événements).
+> Les tables gardent le préfixe `pokecollect_` (ancien nom de l'app) : les renommer orphelinerait les collections existantes.
+>
+> La liste des conventions vit dans `src/lib/events.js` ; elle est mise en cache dans `pokecollect_shared` sous la clé `collector_events_2027` (à faire évoluer quand la liste change).
 
 ### Variables d'environnement
 
@@ -236,57 +234,32 @@ VITE_SUPABASE_URL=https://xxxxxxxxxxxx.supabase.co
 VITE_SUPABASE_ANON_KEY=sb_publishable_...
 ```
 
+Sans ces variables, l'app tourne en mode local sans compte.
+
 ### Commandes
 
 ```bash
 npm install
 
-# Développement
+# Développement (les fonctions Netlify sont servies aussi)
 npm run dev
 
-# Build de production (dans dist_new/ pour éviter les conflits de permissions)
-npm run build -- --outDir dist_new
-
-# Déploiement Netlify
-netlify deploy --prod --dir dist_new
+# Build de production dans dist/
+npm run build
 ```
 
----
+En développement, ajouter `?guest=1` à l'adresse (avant le `#`) ouvre l'app sans connexion, avec des données locales.
 
-## Onglets
-
-| Icône | Onglet | Description |
-|:-----:|--------|-------------|
-| 🏠 | Home | Tous les sets TCG |
-| 🔍 | Search | Recherche par nom + rareté |
-| 📷 | Scan | Scanner une carte par caméra ou numéro |
-| 📋 | Lists | Listes personnalisées avec pokéballs |
-| ★ | Favoris | Sets, cartes et produits mis en favoris |
-| 🛍️ | Produits | Catalogue scellé avec images et favoris |
+Le déploiement se fait par Netlify à chaque push sur `main` (commande `npm run build`, dossier `dist`).
 
 ---
 
-## Road map
+## Pistes
 
-### Contenu & communauté
-- [x] **Articles Pokémon** — flux d'actualités TCG via RSS (PokéBeach, PokeGuardian, Limitless TCG) en production, Reddit fallback en dev ; cache serveur Supabase 24h
-- [x] **Dates des conventions** — calendrier des événements TCG français et européens, mis à jour depuis Supabase sans redéploiement
-- [ ] **Rappels d'événements** — notifications push pour les conventions et tournois à venir
-
-### Marché & prix
-- [ ] **Prix FR sur les cartes** — cotations en euros en temps réel depuis Cardmarket pour chaque carte de la collection
-- [ ] **Prix FR sur les produits** — mise à jour automatique des prix des boosters / ETB / displays depuis le marché français
-- [ ] **Graphique des prix** — historique de prix par carte (évolution semaine / mois / an)
-- [ ] **Valeur totale de la collection** — estimation automatique de la valeur en euros de toute la collection (somme des prix Cardmarket de chaque carte possédée)
-
-### Performance & offline
-- [x] **Cache serveur des sets et cartes** — sets (TTL 7j) et cartes par set (TTL 30j) stockés dans Supabase ; stratégie 3-tiers : local SQLite → Supabase → API pokemontcg.io
-
-### Scan
-- [ ] **Fix scan de cartes** — améliorer la fiabilité du BarcodeDetector (QR codes + codes-barres des boosters) et de la recherche manuelle par numéro
-
-### Grading
-- [x] **Sociétés de gradation françaises** — PSA, PCA, CA, CollectAura, CCC, CGC, Beckett + champ libre "Autres"
+- [ ] Rappels pour les conventions à venir
+- [ ] Prix à jour pour les produits scellés (aujourd'hui saisis à la main)
+- [ ] Historique de prix par carte
+- [ ] Noms et visuels français des cartes
 
 ---
 
