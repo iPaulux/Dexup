@@ -14,7 +14,7 @@ export function Splash() {
   return (
     <div className={`splash${phase === 'out' ? ' out' : ''}`} aria-hidden="true">
       <Logo size={96} />
-      <b>PokéCollect</b>
+      <b>Dexup</b>
     </div>
   );
 }

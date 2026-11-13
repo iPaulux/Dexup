@@ -57,8 +57,8 @@ export default defineConfig({
       registerType: 'autoUpdate',
       includeAssets: ['favicon.ico', 'logo.svg', 'apple-touch-icon.png'],
       manifest: {
-        name: 'PokéCollect',
-        short_name: 'PokéCollect',
+        name: 'Dexup',
+        short_name: 'Dexup',
         description: 'Gère ta collection de cartes Pokémon',
         theme_color: '#655ba4',
         background_color: '#f5f5f5',

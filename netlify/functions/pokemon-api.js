@@ -53,7 +53,7 @@ export const handler = async (event) => {
 
   const url = `${BASE}${_path}${qs}`;
 
-  const reqHeaders = { 'User-Agent': 'PokéCollect/1.0' };
+  const reqHeaders = { 'User-Agent': 'Dexup/1.0' };
   if (process.env.POKEMON_TCG_API_KEY) {
     reqHeaders['X-Api-Key'] = process.env.POKEMON_TCG_API_KEY;
   }

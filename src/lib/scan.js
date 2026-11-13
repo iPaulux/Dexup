@@ -1,4 +1,4 @@
-// OCR du numéro de carte (Tesseract chargé à la demande) + helpers de recadrage.
+// OCR du numéro de carte (Tesseract chargé à la demande) + recadrage de la zone visée.
 
 let workerPromise = null;
 
@@ -7,37 +7,40 @@ export function getOcrWorker() {
     workerPromise = (async () => {
       const { createWorker } = await import('tesseract.js');
       const worker = await createWorker('eng', 1, { logger: () => {} });
-      await worker.setParameters({
-        tessedit_char_whitelist: '0123456789/',
-        tessedit_pageseg_mode: '7', // une seule ligne : « 025/197 »
-      });
+      // Le bas d'une carte tient sur plusieurs lignes (illustrateur, numéro, texte) : mode « bloc de texte ».
+      // Le mode « ligne unique » ne lit rien dès qu'une deuxième ligne entre dans le cadre.
+      await worker.setParameters({ tessedit_pageseg_mode: '6' });
       return worker;
     })().catch((e) => { workerPromise = null; throw e; });
   }
   return workerPromise;
 }
 
-// Doit rester aligné sur le cadre affiché (.cam-frame : 65 % de large, ratio 3/4, zone numéro 18 %).
-const FRAME_WIDTH = 0.65;
-const NUMBER_STRIP = 0.18;
-
-export function cropNumberArea(video, invert = false) {
+/**
+ * Découpe dans la vidéo exactement ce que l'utilisateur voit dans `zoneEl`.
+ * La vidéo est affichée en `object-fit: cover` : on reconvertit le rectangle écran en pixels vidéo.
+ */
+export function cropZone(video, zoneEl, invert = false) {
   const vw = video.videoWidth;
   const vh = video.videoHeight;
   if (!vw || !vh) return null;
 
-  const frameW = vw * FRAME_WIDTH;
-  const frameH = frameW * (4 / 3);
-  const frameX = (vw - frameW) / 2;
-  const frameY = (vh - frameH) / 2;
-  const stripH = frameH * NUMBER_STRIP;
-  const stripY = frameY + frameH - stripH;
+  const box = video.getBoundingClientRect();
+  const zone = zoneEl.getBoundingClientRect();
+  const scale = Math.max(box.width / vw, box.height / vh);
+  const offsetX = (box.width - vw * scale) / 2;
+  const offsetY = (box.height - vh * scale) / 2;
+  const sx = Math.max(0, (zone.left - box.left - offsetX) / scale);
+  const sy = Math.max(0, (zone.top - box.top - offsetY) / scale);
+  const sw = Math.min(vw - sx, zone.width / scale);
+  const sh = Math.min(vh - sy, zone.height / scale);
+  if (sw < 8 || sh < 8) return null; // flux vidéo pas encore prêt
 
   const canvas = document.createElement('canvas');
-  canvas.width = Math.round(frameW);
-  canvas.height = Math.round(stripH);
+  canvas.width = Math.round(sw);
+  canvas.height = Math.round(sh);
   const ctx = canvas.getContext('2d');
-  ctx.drawImage(video, frameX, stripY, frameW, stripH, 0, 0, canvas.width, canvas.height);
+  ctx.drawImage(video, sx, sy, sw, sh, 0, 0, canvas.width, canvas.height);
 
   if (invert) {
     const img = ctx.getImageData(0, 0, canvas.width, canvas.height);
@@ -71,9 +74,10 @@ export function preprocess(src) {
   return dst;
 }
 
+// On n'accepte que la forme « 025/197 » : un nombre isolé (année du copyright, PV…) donnerait de faux résultats.
 export function extractCardNumber(text) {
-  const m = text.match(/\b(\d{1,4}(?:\/\d{1,4})?)\b/);
-  return m ? m[1] : null;
+  const m = text.match(/(\d{1,3})\s*\/\s*(\d{1,3})/);
+  return m ? `${m[1]}/${m[2]}` : null;
 }
 
 export const isCardNumber = (q) => /^\d{1,4}(\/\d{1,4})?$/.test(q);

@@ -56,7 +56,7 @@ function Sidebar({ email, onAccount }) {
   const { pathname } = useLocation();
   return (
     <aside className="sidebar">
-      <div className="sidebar-brand"><Logo size={28} />PokéCollect</div>
+      <div className="sidebar-brand"><Logo size={28} />Dexup</div>
       {TABS.map(({ path, label, Icon, match }) => {
         const active = match(pathname);
         return (

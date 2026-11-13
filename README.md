@@ -1,4 +1,4 @@
-# PokéCollect
+# Dexup
 
 > Application web progressive (PWA) de suivi de collection de cartes Pokémon — React + Vite + Supabase.
 

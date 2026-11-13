@@ -49,7 +49,7 @@ export default function Home({ onAccount }) {
   return (
     <Page>
       <header className="topbar">
-        <h1 className="brand">PokéCollect</h1>
+        <h1 className="brand">Dexup</h1>
         <button className="avatar-btn" onClick={onAccount} aria-label="Mon compte">
           <Logo size={28} />
         </button>

@@ -27,7 +27,7 @@ export const handler = async (event) => {
     try {
       const res = await fetch(feedUrl, {
         headers: {
-          'User-Agent': 'PokeCollect/1.0 (feed reader)',
+          'User-Agent': 'Dexup/1.0 (feed reader)',
           Accept: 'application/rss+xml, application/xml, text/xml, */*',
         },
         signal: AbortSignal.timeout(8000),
