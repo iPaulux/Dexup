@@ -45,6 +45,9 @@
 
 ### 📷 Scan
 - Accès caméra avec cadre de scan animé (ligne rouge)
+- **Scan automatique** : la lecture se déclenche dès que la carte est nette, immobile et bien éclairée (conseils « Ne bouge plus », « Plus de lumière », « Trop de reflets »), puis attend que la carte change avant de relire
+- OCR du numéro (`025/193`) avec correction des caractères ambigus (O→0, l→1…) et contraste automatique
+- **Il suffit de passer la carte** : pas de zone à viser. Le bas de la carte (numéro à gauche ou à droite selon l'époque) et le nom en haut sont lus en parallèle ; le nom (« Goupix », « Tiplouf ») + les chiffres lus ouvrent directement la bonne carte. Si seul le nom est lisible (webcam, reflet), les cartes de ce Pokémon sont proposées des plus récentes aux plus anciennes
 - **BarcodeDetector** natif (Chrome / Safari) pour détecter QR codes et codes-barres automatiquement
 - Recherche manuelle par numéro de carte (ex : `025`, `163/193`)
 - Résultats en grille cliquables → fiche détaillée
@@ -290,3 +293,9 @@ netlify deploy --prod --dir dist_new
 ## Auteur
 
 Fait avec ❤️ par **Paul Guttin**
+
+---
+
+## Licences tierces
+
+Le scanner reprend et adapte du code de [pokeum](https://github.com/TBLgGamin/pokeum) (© 2026 TBLgGamin, licence MIT) — voir [`third_party/pokeum`](third_party/pokeum).

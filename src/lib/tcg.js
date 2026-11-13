@@ -173,15 +173,19 @@ export function useWallet(owned) {
 export const formatEuro = (v) => `${v.toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €`;
 
 const SEARCH_SELECT = 'id,name,number,rarity,set,images';
+// Le scanner a besoin des PV et des attaques pour départager les cartes d'un même Pokémon.
+export const SCAN_SELECT = `${SEARCH_SELECT},hp,attacks,abilities`;
 
-export async function searchCards({ name, rarity, number, printedTotal, page = 1, pageSize = 60, select = SEARCH_SELECT }) {
+export async function searchCards({ name, exactName, rarity, number, printedTotal, page = 1, pageSize = 60, orderBy, select = SEARCH_SELECT }) {
   const parts = [];
   if (name) parts.push(`name:"*${name}*"`);
+  if (exactName) parts.push(`!name:"${exactName}"`);
   if (number) parts.push(`number:${number}`);
   if (printedTotal) parts.push(`set.printedTotal:${printedTotal}`);
   if (rarity) parts.push(`rarity:"${rarity}"`);
   const params = { q: parts.join(' '), pageSize, page, select };
-  if (!number) params.orderBy = 'name';
+  if (orderBy) params.orderBy = orderBy;
+  else if (!number) params.orderBy = 'name';
   const json = await getJson(pokemonApiUrl('/cards', params));
   return { cards: json.data || [], total: json.totalCount || 0 };
 }
