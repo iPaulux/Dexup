@@ -3,11 +3,26 @@ import { useNavigate } from 'react-router-dom';
 import { CameraOff, Keyboard, Layers, ScanLine, SwitchCamera, X } from 'lucide-react';
 import { useCollection } from '../store/collection';
 import { searchCards } from '../lib/tcg';
-import { cropZone, extractCardNumber, getOcrWorker, isCardNumber, preprocess } from '../lib/scan';
+import { cropZone, extractCardNumber, getOcrWorker, isCardNumber, preprocess, warmOcr } from '../lib/scan';
+import { useAutoCapture } from '../lib/useAutoCapture';
 import { CardsView } from '../components/cards';
 import { SearchField, Sheet, plural } from '../components/ui';
 
 const BARCODE_OK = typeof window !== 'undefined' && 'BarcodeDetector' in window;
+// Les codes-barres n'ont pas besoin de 60 lectures par seconde : 4 suffisent et libèrent le processeur pour l'OCR.
+const BARCODE_INTERVAL_MS = 250;
+// Lectures automatiques ratées d'affilée avant d'afficher un conseil et d'attendre que la carte bouge.
+const AUTO_MAX_FAILURES = 3;
+
+// Résultats déjà obtenus pendant la session : rescanner la même carte ne refait pas d'appel réseau.
+const searchCache = new Map();
+async function cachedSearch(key, fetcher) {
+  if (searchCache.has(key)) return searchCache.get(key);
+  const cards = await fetcher();
+  if (searchCache.size > 100) searchCache.delete(searchCache.keys().next().value);
+  searchCache.set(key, cards);
+  return cards;
+}
 const CORNERS = [
   { top: 0, left: 0, borderTopWidth: 3, borderLeftWidth: 3, borderTopLeftRadius: 16 },
   { top: 0, right: 0, borderTopWidth: 3, borderRightWidth: 3, borderTopRightRadius: 16 },
@@ -17,9 +32,11 @@ const CORNERS = [
 
 export default function Scan() {
   const navigate = useNavigate();
-  const { openCard } = useCollection();
+  const { openCard, activeCard } = useCollection();
   const videoRef = useRef(null);
+  const frameRef = useRef(null);
   const zoneRef = useRef(null);
+  const autoFailures = useRef(0);
   const streamRef = useRef(null);
   const startId = useRef(0);
   const lastScan = useRef({ code: null, at: 0 });
@@ -43,12 +60,16 @@ export default function Scan() {
       if (isCardNumber(q)) {
         // « 001/165 » : numéro sans zéros de tête + taille du set, ce qui isole presque toujours la bonne carte.
         const [num, total] = q.split('/').map((n) => String(parseInt(n, 10)));
-        cards = total ? (await searchCards({ number: num, printedTotal: total, pageSize: 30 })).cards : [];
-        if (!cards.length) cards = (await searchCards({ number: num, pageSize: 30 })).cards;
+        cards = await cachedSearch(`n:${num}/${total ?? ''}`, async () => {
+          let found = total ? (await searchCards({ number: num, printedTotal: total, pageSize: 30 })).cards : [];
+          if (!found.length) found = (await searchCards({ number: num, pageSize: 30 })).cards;
+          return found;
+        });
       } else {
-        cards = (await searchCards({ name: q, pageSize: 20 })).cards;
+        cards = await cachedSearch(`q:${q.toLowerCase()}`, async () => (await searchCards({ name: q, pageSize: 20 })).cards);
       }
       if (cards.length) {
+        navigator.vibrate?.(30);
         setResults({ query: q, cards });
         setMessage(null);
         // Une seule carte possible : on ouvre directement sa fiche.
@@ -61,6 +82,23 @@ export default function Scan() {
     }
     setSearching(false);
   }, [openCard]);
+
+  const busy = ocr !== 'idle' || searching;
+  const paused = cam !== 'active' || busy || sheet !== null || !!activeCard;
+  const pausedRef = useRef(paused);
+  pausedRef.current = paused;
+
+  const readRef = useRef(null);
+  const { hint: autoHint, disarm, rearm } = useAutoCapture({
+    videoRef,
+    frameRef,
+    enabled: cam === 'active' && sheet === null && !activeCard,
+    busy,
+    onStable: () => { setMessage(null); readRef.current?.(true); },
+  });
+
+  // Le moteur OCR se télécharge pendant que l'utilisateur cadre sa carte.
+  useEffect(() => { if (cam === 'active') warmOcr(); }, [cam]);
 
   const stopStream = useCallback(() => {
     startId.current++;
@@ -99,12 +137,14 @@ export default function Scan() {
     const detector = new window.BarcodeDetector({
       formats: ['qr_code', 'ean_13', 'ean_8', 'code_128', 'code_39', 'data_matrix'],
     });
-    let raf = null;
+    let timer = null;
     let alive = true;
     const loop = async () => {
       if (!alive) return;
       try {
-        const code = (await detector.detect(videoRef.current))[0]?.rawValue;
+        // Rien à détecter tant qu'une lecture tourne, qu'une fiche couvre la caméra ou que l'onglet est caché.
+        const paused = document.hidden || pausedRef.current;
+        const code = paused ? null : (await detector.detect(videoRef.current))[0]?.rawValue;
         const now = Date.now();
         if (code && (code !== lastScan.current.code || now - lastScan.current.at > 5000)) {
           lastScan.current = { code, at: now };
@@ -112,10 +152,10 @@ export default function Scan() {
           runSearch(code);
         }
       } catch (_) { /* image pas encore prête */ }
-      raf = requestAnimationFrame(loop);
+      if (alive) timer = window.setTimeout(loop, BARCODE_INTERVAL_MS);
     };
-    raf = requestAnimationFrame(loop);
-    return () => { alive = false; if (raf) cancelAnimationFrame(raf); };
+    timer = window.setTimeout(loop, BARCODE_INTERVAL_MS);
+    return () => { alive = false; window.clearTimeout(timer); };
   }, [cam, runSearch]);
 
   const flip = () => {
@@ -124,27 +164,32 @@ export default function Scan() {
     startCamera(next);
   };
 
-  const snap = async () => {
+  // Lit le numéro dans la zone en pointillés. `auto` : déclenché par l'auto-capture,
+  // donc on reste discret en cas d'échec et on retente sur les images suivantes.
+  const readNumber = async (auto) => {
     const video = videoRef.current;
     if (cam !== 'active' || ocr !== 'idle' || searching) return;
     const crop = cropZone(video, zoneRef.current);
-    if (!crop) return;
+    if (!crop) { if (auto) rearm(); return; }
 
-    setMessage(null);
+    if (!auto) setMessage(null);
     setOcr('loading');
     try {
       const worker = await getOcrWorker();
       setOcr('running');
-      let number = extractCardNumber((await worker.recognize(preprocess(crop))).data.text);
-      if (!number) {
-        const inverted = cropZone(video, zoneRef.current, true);
-        if (inverted) number = extractCardNumber((await worker.recognize(preprocess(inverted))).data.text);
-      }
+      // Version normale puis inversée (texte clair sur fond sombre), tirées de la même image.
+      const { normal, inverted } = preprocess(crop);
+      let number = extractCardNumber((await worker.recognize(normal)).data.text);
+      if (!number) number = extractCardNumber((await worker.recognize(inverted)).data.text);
       setOcr('idle');
       if (number) {
+        autoFailures.current = 0;
         setInput(number);
         runSearch(number);
+      } else if (auto && ++autoFailures.current < AUTO_MAX_FAILURES) {
+        rearm();
       } else {
+        autoFailures.current = 0;
         setMessage('Numéro illisible — rapproche la carte ou saisis-le à la main.');
       }
     } catch (_) {
@@ -153,6 +198,13 @@ export default function Scan() {
     }
   };
 
+  const snap = () => {
+    disarm(); // pas de lecture automatique en double juste après
+    readNumber(false);
+  };
+
+  readRef.current = readNumber;
+
   const submitManual = () => {
     if (!input.trim()) return;
     setSheet(null);
@@ -160,11 +212,10 @@ export default function Scan() {
   };
 
   const close = () => (window.history.state?.idx > 0 ? navigate(-1) : navigate('/'));
-  const busy = ocr !== 'idle' || searching;
   const hint = message
     ?? (ocr === 'loading' ? 'Préparation de la lecture (première fois)…'
       : ocr === 'running' ? 'Lecture du numéro…'
-        : 'Place le numéro de la carte dans le cadre en pointillés');
+        : autoHint || 'Place la carte dans le cadre, numéro dans les pointillés — la lecture est automatique');
 
   return (
     <div className="scan">
@@ -181,7 +232,7 @@ export default function Scan() {
       <div className="scan-center">
         {cam === 'active' && (
           <>
-            <div className="scan-frame">
+            <div className="scan-frame" ref={frameRef}>
               {CORNERS.map((style, i) => <span key={i} className="scan-corner" style={style} />)}
               {!busy && <span className="scan-line" />}
               <span className="scan-zone" ref={zoneRef} />
