@@ -173,6 +173,8 @@ export function useWallet(owned) {
 export const formatEuro = (v) => `${v.toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €`;
 
 const SEARCH_SELECT = 'id,name,number,rarity,set,images';
+// Le scanner a besoin des PV et des attaques pour départager les cartes d'un même Pokémon.
+export const SCAN_SELECT = `${SEARCH_SELECT},hp,attacks,abilities`;
 
 export async function searchCards({ name, exactName, rarity, number, printedTotal, page = 1, pageSize = 60, orderBy, select = SEARCH_SELECT }) {
   const parts = [];

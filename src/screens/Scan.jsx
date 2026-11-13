@@ -2,10 +2,11 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { CameraOff, Keyboard, Layers, ScanLine, SwitchCamera, X } from 'lucide-react';
 import { useCollection } from '../store/collection';
-import { searchCards } from '../lib/tcg';
+import { SCAN_SELECT, searchCards } from '../lib/tcg';
 import {
-  binarize, buildNameIndex, cropNumberBand, cropTitle, extractCardNumber, getOcrWorker, isCardNumber,
-  matchPokemonName, pickCardByDigits, TITLE_OFFSET, TITLE_TARGET_HEIGHT, warmOcr,
+  binarize, BODY_TARGET_HEIGHT, buildNameIndex, clearWinner, cropBody, cropHp, cropNumberBand, cropTitle, extractCardNumber,
+  extractHp, getOcrWorker, isCardNumber, matchPokemonName, pickCardByDigits, rankCards, TITLE_OFFSET,
+  HP_TARGET_HEIGHT, TITLE_TARGET_HEIGHT, warmOcr,
 } from '../lib/scan';
 import { getFrToEnMap, resolveSearchTerm } from '../utils/pokemonNames';
 import { useAutoCapture } from '../lib/useAutoCapture';
@@ -68,8 +69,9 @@ export default function Scan() {
   const [sheet, setSheet] = useState(null); // null | 'results' | 'manual'
 
   // Toutes les cartes d'un Pokémon (nom anglais exact), les plus récentes d'abord.
+  // Avec PV et attaques (SCAN_SELECT) pour départager les cartes quand le numéro est illisible.
   const cardsOfPokemon = useCallback((enName) => cachedSearch(`e:${enName}`, async () => (
-    await searchCards({ exactName: enName, pageSize: 250, orderBy: '-set.releaseDate' })).cards), []);
+    await searchCards({ exactName: enName, pageSize: 250, orderBy: '-set.releaseDate', select: SCAN_SELECT })).cards), []);
 
   // Une carte précise a été reconnue : on ouvre directement sa fiche.
   const openFound = useCallback((card, query) => {
@@ -216,9 +218,11 @@ export default function Scan() {
     startCamera(next);
   };
 
-  // Indices accumulés sur la carte en cours : textes du bas de carte et nom déjà lu.
-  // Remis à zéro dès qu'un résultat est affiché ou qu'une autre carte apparaît.
-  const clues = useRef({ texts: [], name: null, nameReads: 0 });
+  // Indices accumulés sur la carte en cours : textes du bas et du corps de carte, nom et PV déjà lus,
+  // dernier classement des cartes de ce Pokémon. Remis à zéro dès qu'un résultat est affiché
+  // ou qu'une autre carte apparaît.
+  const emptyClues = () => ({ texts: [], bodies: [], name: null, nameReads: 0, hp: null, ranked: null });
+  const clues = useRef(emptyClues());
 
   // Lit la carte : le bas de la carte (numéro) et le haut (nom) en parallèle, sur deux moteurs.
   // Le numéro désigne une impression précise ; le nom, bien plus gros, se lit presque toujours.
@@ -230,6 +234,8 @@ export default function Scan() {
     if (cam !== 'active' || ocr !== 'idle' || searching) return;
     const band = cropNumberBand(video, frameRef.current);
     const title = cropTitle(video, frameRef.current);
+    const body = cropBody(video, frameRef.current); // corps et PV : lus seulement si le nom ne suffit pas
+    const hpCrop = cropHp(video, frameRef.current);
     if (!band) { if (auto) rearm(); return; }
 
     if (!auto) setMessage(null);
@@ -251,15 +257,16 @@ export default function Scan() {
 
       const c = clues.current;
       // Un autre nom : c'est une autre carte, les anciens indices ne valent plus.
-      if (name && c.name && c.name.en !== name.en) clues.current = { texts: [], name: null, nameReads: 0 };
+      if (name && c.name && c.name.en !== name.en) clues.current = emptyClues();
       const cl = clues.current;
       cl.texts = [t1, ...cl.texts].slice(0, KEPT_TEXTS);
       if (name) {
         cl.nameReads += 1;
         cl.name = name;
+        cl.hp = extractHp(t3) ?? cl.hp; // « PV60 » sur la même ligne que le nom
       }
       const known = name ?? cl.name;
-      const done = () => { autoFailures.current = 0; clues.current = { texts: [], name: null, nameReads: 0 }; };
+      const done = () => { autoFailures.current = 0; clues.current = emptyClues(); };
 
       // 1. Nom connu : on cherche la carte exacte parmi celles de ce Pokémon.
       let nameChecked = false;
@@ -271,6 +278,20 @@ export default function Scan() {
           const exact = (number && cards.find((card) => sameNumber(card, number))) || pickCardByDigits(cards, cl.texts);
           if (exact) { setSearching(false); done(); openFound(exact, known.fr); return; }
           nameChecked = !!name;
+          // Numéro illisible : PV, attaques et dégâts lus dans le corps de la carte départagent.
+          // Une passe OCR de plus, seulement dans ce cas-là.
+          if (body && cards.length > 1) {
+            const bodyImg = binarize(body, { targetHeight: BODY_TARGET_HEIGHT, offset: TITLE_OFFSET });
+            cl.bodies = [(await nameWorker.recognize(bodyImg)).data.text, ...cl.bodies].slice(0, KEPT_TEXTS);
+            if (!cl.hp && hpCrop) {
+              const hpImg = binarize(hpCrop, { targetHeight: HP_TARGET_HEIGHT, offset: TITLE_OFFSET });
+              cl.hp = extractHp((await nameWorker.recognize(hpImg)).data.text);
+            }
+          }
+          const ranked = rankCards(cards, { hp: cl.hp, body: cl.bodies.join('\n') });
+          cl.ranked = ranked.map((r) => r.card);
+          const winner = clearWinner(ranked);
+          if (winner) { setSearching(false); done(); openFound(winner, known.fr); return; }
         } catch (_) { /* réseau : on retombe sur la recherche classique */ }
         setSearching(false);
       }
@@ -283,9 +304,17 @@ export default function Scan() {
       }
       // 3. Nom seul, relu plusieurs fois sans numéro : la liste des cartes de ce Pokémon.
       if (known && (!auto || cl.nameReads >= NAME_ONLY_ATTEMPTS || autoFailures.current + 1 >= AUTO_MAX_FAILURES)) {
+        const ranked = cl.ranked;
         done();
         setMessage(null);
-        runSearch(known.fr, known.en);
+        if (ranked?.length) {
+          // Les cartes de ce Pokémon, les plus probables d'après les PV et les attaques en premier.
+          navigator.vibrate?.(30);
+          setResults({ query: known.fr, cards: ranked });
+          setSheet('results');
+        } else {
+          runSearch(known.fr, known.en);
+        }
         return;
       }
       if (auto && ++autoFailures.current < AUTO_MAX_FAILURES) {

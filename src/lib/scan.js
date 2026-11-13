@@ -66,6 +66,22 @@ export function cropTitle(video, frameEl) {
 // et une carte tenue à la main n'est jamais pile dans le cadre. Lire toute la bande évite
 // d'avoir à viser une petite zone.
 const NUMBER_BAND = [-0.02, 0.8, 1.02, 1.04];
+// Corps de la carte (attaques, talents), d'après la version de main (2e7188d).
+const BODY_BAND = [0.04, 0.46, 0.96, 0.86];
+
+/** Découpe le corps de la carte : les noms d'attaques départagent les cartes d'un même Pokémon. */
+export function cropBody(video, frameEl) {
+  return cropFraction(video, frameEl, BODY_BAND);
+}
+
+// Coin haut droit (« PV 60 ») : le bandeau du nom s'arrête à 80 % de la largeur et le rate.
+const HP_BAND = [0.55, -0.04, 1.02, 0.12];
+export const HP_TARGET_HEIGHT = 200;
+
+/** Découpe le coin des PV. */
+export function cropHp(video, frameEl) {
+  return cropFraction(video, frameEl, HP_BAND);
+}
 
 /** Découpe la bande du bas de la carte (numéro de collection) dans le cadre `frameEl`. */
 export function cropNumberBand(video, frameEl) {
@@ -96,6 +112,8 @@ function cropRect(video, r) {
 const OCR_MAX_SCALE = 3;
 // Hauteur visée pour le bandeau du nom (~1:1 en 1080p, réduit au-delà).
 export const TITLE_TARGET_HEIGHT = 280;
+// Corps de carte : les noms d'attaques sont en gros caractères gras, inutile d'agrandir.
+export const BODY_TARGET_HEIGHT = 420;
 
 // Hauteur visée pour la bande du numéro : le numéro y fait alors ~25-30 px, la taille que
 // Tesseract lit le mieux. Une bande plus grande (flux 4K) est RÉDUITE : chaque pixel coûte du temps OCR.
@@ -324,3 +342,76 @@ export function pickCardByDigits(cards, texts) {
 // Corrige les sosies de chiffres uniquement collés à un vrai chiffre (« 1O8 » → « 108 »),
 // pour ne pas transformer chaque « o » du texte en zéro.
 const fixLookalikeRuns = (text) => text.replace(/[0-9OoDQIli|SBZ]*\d[0-9OoDQIli|SBZ]*/g, fixDigits);
+
+// ─── PV et attaques ───────────────────────────────────────────────────────────
+// Repris du scanner de main (2e7188d, iPaulux) : quand le numéro est illisible, les PV
+// et les noms d'attaques lus sur la carte départagent les cartes d'un même Pokémon.
+
+const plainWords = (s) => s.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z]+/g, ' ').trim();
+const tokenize = (text) => plainWords(text).split(' ').filter((t) => t.length >= 2);
+
+function editDistance(a, b) {
+  if (Math.abs(a.length - b.length) > 2) return 9;
+  let prev = Array.from({ length: b.length + 1 }, (_, j) => j);
+  for (let i = 1; i <= a.length; i += 1) {
+    const row = [i];
+    for (let j = 1; j <= b.length; j += 1) {
+      row[j] = Math.min(prev[j] + 1, row[j - 1] + 1, prev[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
+    }
+    prev = row;
+  }
+  return prev[b.length];
+}
+
+/** Cherche `phrase` dans une suite de mots lus, en tolérant les erreurs de lecture ; renvoie la distance ou null. */
+function findPhrase(tokens, phrase) {
+  const target = plainWords(phrase);
+  if (target.length < 3) return null;
+  const width = target.split(' ').length;
+  const tolerance = target.length >= 8 ? 2 : target.length >= 5 ? 1 : 0; // les noms courts doivent être exacts
+  let best = null;
+  for (let i = 0; i + width <= tokens.length; i += 1) {
+    const d = editDistance(tokens.slice(i, i + width).join(' '), target);
+    if (d <= tolerance && (best === null || d < best)) best = d;
+  }
+  return best;
+}
+
+/** Les PV sont le seul nombre rond (30 à 340) du bandeau du nom. */
+export function extractHp(text) {
+  const values = [...(text || '').matchAll(/\d{2,3}/g)].map((m) => Number(m[0])).filter((n) => n >= 30 && n <= 340 && n % 10 === 0);
+  return values.length ? values[values.length - 1] : null;
+}
+
+/**
+ * Classe les cartes d'un Pokémon selon ce qui a été lu : PV (+2), nom d'attaque ou de talent
+ * retrouvé dans le texte du corps (+3 chacun), dégâts de toutes ses attaques retrouvés (+2). Tri stable : à score égal, l'ordre d'origine
+ * (les plus récentes d'abord) est gardé. Renvoie [{ card, score }], le meilleur en premier.
+ */
+export function rankCards(cards, { hp, body }) {
+  const tokens = tokenize(body || '');
+  const numbers = new Set([...(body || '').matchAll(/\d{1,3}/g)].map((m) => Number(m[0])));
+  return cards
+    .map((card) => {
+      let score = 0;
+      if (hp && Number(card.hp) === hp) score += 2;
+      for (const attack of card.attacks || []) if (findPhrase(tokens, attack.name) !== null) score += 3;
+      for (const ability of card.abilities || []) if (findPhrase(tokens, ability.name) !== null) score += 3;
+      // Dégâts des attaques (« 30 », « 10× ») : indépendants de la langue, contrairement aux noms
+      // d'attaques de l'API (en anglais) — une carte française se départage aussi.
+      const damages = (card.attacks || []).map((at) => parseInt(at.damage, 10)).filter((n) => n > 0);
+      if (damages.length && damages.every((n) => numbers.has(n))) score += 2;
+      return { card, score };
+    })
+    .sort((a, b) => b.score - a.score);
+}
+
+/**
+ * Une carte se détache nettement : au moins deux indices concordants (PV + dégâts, ou une
+ * attaque reconnue) et strictement devant toutes les autres.
+ */
+export function clearWinner(ranked) {
+  if (!ranked.length) return null;
+  const [first, second] = ranked;
+  return first.score >= 3 && (!second || first.score > second.score) ? first.card : null;
+}
