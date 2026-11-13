@@ -8,3 +8,4 @@ by TBLgGamin, distributed under the MIT License (see [LICENSE](LICENSE)).
 | `src/lib/quality.js` | `frontend/src/lib/quality.ts` |
 | `src/lib/useAutoCapture.js` | `frontend/src/composables/useAutoCapture.ts` |
 | `src/lib/scan.js` (`extractCardNumber`) | `app/signals/ocr.py` (`parse_collector_number`) |
+| `src/lib/scan.js` (`matchPokemonName`) | `app/signals/name.py` (title-band name matching) |

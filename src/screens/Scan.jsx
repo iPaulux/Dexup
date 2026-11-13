@@ -3,7 +3,11 @@ import { useNavigate } from 'react-router-dom';
 import { CameraOff, Keyboard, Layers, ScanLine, SwitchCamera, X } from 'lucide-react';
 import { useCollection } from '../store/collection';
 import { searchCards } from '../lib/tcg';
-import { cropZone, extractCardNumber, getOcrWorker, isCardNumber, preprocess, warmOcr } from '../lib/scan';
+import {
+  buildNameIndex, cropTitle, cropZone, extractCardNumber, getOcrWorker, isCardNumber, matchPokemonName,
+  preprocess, TITLE_TARGET_HEIGHT, warmOcr,
+} from '../lib/scan';
+import { getFrToEnMap, resolveSearchTerm } from '../utils/pokemonNames';
 import { useAutoCapture } from '../lib/useAutoCapture';
 import { CardsView } from '../components/cards';
 import { SearchField, Sheet, plural } from '../components/ui';
@@ -12,7 +16,10 @@ const BARCODE_OK = typeof window !== 'undefined' && 'BarcodeDetector' in window;
 // Les codes-barres n'ont pas besoin de 60 lectures par seconde : 4 suffisent et libèrent le processeur pour l'OCR.
 const BARCODE_INTERVAL_MS = 250;
 // Lectures automatiques ratées d'affilée avant d'afficher un conseil et d'attendre que la carte bouge.
-const AUTO_MAX_FAILURES = 3;
+const AUTO_MAX_FAILURES = 4;
+// Pause entre deux lectures automatiques ratées : sans carte (un visage, un bureau),
+// l'OCR ne tourne pas en continu.
+const AUTO_RETRY_DELAY_MS = 400;
 
 // Résultats déjà obtenus pendant la session : rescanner la même carte ne refait pas d'appel réseau.
 const searchCache = new Map();
@@ -50,7 +57,8 @@ export default function Scan() {
   const [searching, setSearching] = useState(false);
   const [sheet, setSheet] = useState(null); // null | 'results' | 'manual'
 
-  const runSearch = useCallback(async (raw) => {
+  // `enName` : nom anglais déjà connu (lu sur la carte) ; sinon un nom saisi est traduit FR→EN.
+  const runSearch = useCallback(async (raw, enName) => {
     const q = raw.trim();
     if (!q) return;
     setSearching(true);
@@ -66,7 +74,15 @@ export default function Scan() {
           return found;
         });
       } else {
-        cards = await cachedSearch(`q:${q.toLowerCase()}`, async () => (await searchCards({ name: q, pageSize: 20 })).cards);
+        if (enName) {
+          // Nom lu sur la carte : ce Pokémon exactement (pas ses formes d'Alola, etc.),
+          // les plus récentes d'abord — c'est le plus souvent la carte qu'on vient d'ouvrir.
+          cards = await cachedSearch(`e:${enName}`, async () => (
+            await searchCards({ exactName: enName, pageSize: 60, orderBy: '-set.releaseDate' })).cards);
+        } else {
+          const name = await resolveSearchTerm(q);
+          cards = await cachedSearch(`q:${name.toLowerCase()}`, async () => (await searchCards({ name, pageSize: 20 })).cards);
+        }
       }
       if (cards.length) {
         navigator.vibrate?.(30);
@@ -98,7 +114,11 @@ export default function Scan() {
   });
 
   // Le moteur OCR se télécharge pendant que l'utilisateur cadre sa carte.
-  useEffect(() => { if (cam === 'active') warmOcr(); }, [cam]);
+  useEffect(() => {
+    if (cam !== 'active') return;
+    warmOcr();
+    getFrToEnMap().then(buildNameIndex).catch(() => {});
+  }, [cam]);
 
   const stopStream = useCallback(() => {
     startId.current++;
@@ -164,12 +184,14 @@ export default function Scan() {
     startCamera(next);
   };
 
-  // Lit le numéro dans la zone en pointillés. `auto` : déclenché par l'auto-capture,
-  // donc on reste discret en cas d'échec et on retente sur les images suivantes.
-  const readNumber = async (auto) => {
+  // Lit la carte : d'abord le numéro (zone en pointillés), qui désigne une impression précise ;
+  // s'il est illisible (webcam, reflet), le nom en haut de la carte, qui est bien plus gros.
+  // `auto` : déclenché par l'auto-capture, donc discret en cas d'échec et nouvel essai ensuite.
+  const readCard = async (auto) => {
     const video = videoRef.current;
     if (cam !== 'active' || ocr !== 'idle' || searching) return;
     const crop = cropZone(video, zoneRef.current);
+    const title = cropTitle(video, frameRef.current);
     if (!crop) { if (auto) rearm(); return; }
 
     if (!auto) setMessage(null);
@@ -178,19 +200,36 @@ export default function Scan() {
       const worker = await getOcrWorker();
       setOcr('running');
       // Version normale puis inversée (texte clair sur fond sombre), tirées de la même image.
+      await worker.setParameters({ tessedit_pageseg_mode: '6' });
       const { normal, inverted } = preprocess(crop);
-      let number = extractCardNumber((await worker.recognize(normal)).data.text);
-      if (!number) number = extractCardNumber((await worker.recognize(inverted)).data.text);
+      const t1 = (await worker.recognize(normal)).data.text;
+      let number = extractCardNumber(t1);
+      let t2 = null;
+      if (!number) { t2 = (await worker.recognize(inverted)).data.text; number = extractCardNumber(t2); }
+
+      let name = null;
+      let t3 = null;
+      if (!number && title) {
+        // Mode « texte épars » : le nom partage sa ligne avec le stade et les PV.
+        await worker.setParameters({ tessedit_pageseg_mode: '11' });
+        t3 = (await worker.recognize(preprocess(title, TITLE_TARGET_HEIGHT).normal)).data.text;
+        name = matchPokemonName(t3);
+      }
       setOcr('idle');
       if (number) {
         autoFailures.current = 0;
         setInput(number);
         runSearch(number);
+      } else if (name) {
+        autoFailures.current = 0;
+        setInput(name.fr);
+        setMessage(null);
+        runSearch(name.fr, name.en);
       } else if (auto && ++autoFailures.current < AUTO_MAX_FAILURES) {
-        rearm();
+        window.setTimeout(rearm, AUTO_RETRY_DELAY_MS);
       } else {
         autoFailures.current = 0;
-        setMessage('Numéro illisible — rapproche la carte ou saisis-le à la main.');
+        setMessage('Carte illisible — rapproche-la, ou saisis son numéro ou son nom.');
       }
     } catch (_) {
       setOcr('idle');
@@ -200,10 +239,10 @@ export default function Scan() {
 
   const snap = () => {
     disarm(); // pas de lecture automatique en double juste après
-    readNumber(false);
+    readCard(false);
   };
 
-  readRef.current = readNumber;
+  readRef.current = readCard;
 
   const submitManual = () => {
     if (!input.trim()) return;
@@ -214,7 +253,7 @@ export default function Scan() {
   const close = () => (window.history.state?.idx > 0 ? navigate(-1) : navigate('/'));
   const hint = message
     ?? (ocr === 'loading' ? 'Préparation de la lecture (première fois)…'
-      : ocr === 'running' ? 'Lecture du numéro…'
+      : ocr === 'running' ? 'Lecture de la carte…'
         : autoHint || 'Place la carte dans le cadre, numéro dans les pointillés — la lecture est automatique');
 
   return (

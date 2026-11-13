@@ -49,8 +49,29 @@ export function sourceRect(video, el) {
 
 /** Découpe dans la vidéo exactement ce que l'utilisateur voit dans `zoneEl`. */
 export function cropZone(video, zoneEl) {
-  const r = sourceRect(video, zoneEl);
-  if (!r) return null;
+  return cropRect(video, sourceRect(video, zoneEl));
+}
+
+// Bandeau du nom, en fraction du cadre de la carte. Plus haut que la carte elle-même
+// (de -6 % à 16 %) : une carte tenue à la main est rarement pile dans le cadre.
+const TITLE_BAND = [0.02, -0.06, 0.8, 0.16];
+
+/** Découpe le bandeau du nom (en haut de la carte) dans le cadre `frameEl`. */
+export function cropTitle(video, frameEl) {
+  const f = sourceRect(video, frameEl);
+  if (!f) return null;
+  const [l, t, r, b] = TITLE_BAND;
+  const x = Math.max(0, f.x + l * f.width);
+  const y = Math.max(0, f.y + t * f.height);
+  return cropRect(video, {
+    x, y,
+    width: Math.min(video.videoWidth - x, (r - l) * f.width),
+    height: Math.min(video.videoHeight - y, f.y + b * f.height - y),
+  });
+}
+
+function cropRect(video, r) {
+  if (!r || r.width < 8 || r.height < 8) return null;
   const canvas = document.createElement('canvas');
   canvas.width = Math.round(r.width);
   canvas.height = Math.round(r.height);
@@ -62,15 +83,19 @@ export function cropZone(video, zoneEl) {
 // sans agrandir inutilement un flux déjà en haute définition (chaque pixel en plus coûte du temps OCR).
 const OCR_TARGET_HEIGHT = 180;
 const OCR_MAX_SCALE = 3;
+export const TITLE_TARGET_HEIGHT = 220;
 
 /**
  * Prépare la zone pour l'OCR : agrandissement adapté, niveaux de gris et contraste
  * automatique (étirement entre les percentiles 2 % et 98 %, robuste aux reflets et à la pénombre).
+ * Le « gris » est le canal le plus clair de chaque pixel, pas la luminance : sur une carte
+ * Feu, le texte gris foncé et le fond rouge ont presque la même luminance et le texte
+ * disparaît, alors que le canal max rend le fond clair et laisse le texte sombre.
  * Renvoie la version normale et la version inversée (texte clair sur fond sombre),
  * toutes deux tirées de la MÊME image — l'ancienne version recapturait une deuxième image.
  */
-export function preprocess(src) {
-  const scale = Math.min(OCR_MAX_SCALE, Math.max(1, OCR_TARGET_HEIGHT / src.height));
+export function preprocess(src, targetHeight = OCR_TARGET_HEIGHT) {
+  const scale = Math.min(OCR_MAX_SCALE, Math.max(1, targetHeight / src.height));
   const width = Math.round(src.width * scale);
   const height = Math.round(src.height * scale);
 
@@ -88,8 +113,7 @@ export function preprocess(src) {
   const gray = new Uint8ClampedArray(n);
   const hist = new Uint32Array(256);
   for (let p = 0, i = 0; p < n; p += 1, i += 4) {
-    const g = 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2];
-    gray[p] = g;
+    gray[p] = Math.max(d[i], d[i + 1], d[i + 2]);
     hist[gray[p]] += 1;
   }
   const [lo, hi] = percentiles(hist, n, 0.02, 0.98);
@@ -154,3 +178,66 @@ export function extractCardNumber(text) {
 }
 
 export const isCardNumber = (q) => /^\d{1,4}(\/\d{1,4})?$/.test(q);
+
+const fold = (str) => str.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]/g, '');
+
+let nameIndex = null;
+/**
+ * Index « nom replié → { fr, en } » construit depuis la table FR→EN de Dexup.
+ * Les noms anglais sont indexés aussi, pour les cartes en anglais.
+ */
+export function buildNameIndex(frToEn) {
+  const index = new Map();
+  for (const [fr, en] of Object.entries(frToEn)) {
+    const pretty = (n) => n.replace(/(^|[\s-])\p{L}/gu, (c) => c.toUpperCase());
+    const entry = { fr: pretty(fr), en };
+    if (fold(fr).length >= 3) index.set(fold(fr), entry);
+    if (fold(en).length >= 3 && !index.has(fold(en))) index.set(fold(en), { fr: pretty(en), en });
+  }
+  nameIndex = index;
+  return index;
+}
+
+function withinOneEdit(a, b) {
+  if (Math.abs(a.length - b.length) > 1) return false;
+  let i = 0;
+  let j = 0;
+  let edits = 0;
+  while (i < a.length && j < b.length) {
+    if (a[i] === b[j]) { i += 1; j += 1; continue; }
+    if (++edits > 1) return false;
+    if (a.length > b.length) i += 1;
+    else if (b.length > a.length) j += 1;
+    else { i += 1; j += 1; }
+  }
+  return edits + (a.length - i) + (b.length - j) <= 1;
+}
+
+/**
+ * Cherche un nom de Pokémon dans le texte lu en haut de la carte (approche de pokeum,
+ * app/signals/name.py) : chaque mot et chaque paire de mots est comparé à l'index ;
+ * le plus long nom exact gagne, et une seule faute est tolérée sur les noms de 6 lettres et plus.
+ * Renvoie { fr, en } ou null.
+ */
+export function matchPokemonName(text, index = nameIndex) {
+  if (!index || !text) return null;
+  const words = text.split(/\s+/).map(fold).filter(Boolean);
+  const keys = [];
+  for (let i = 0; i < words.length; i += 1) {
+    keys.push(words[i]);
+    if (i + 1 < words.length) keys.push(words[i] + words[i + 1]);
+  }
+  let best = null;
+  for (const k of keys) {
+    const hit = index.get(k);
+    if (hit && (!best || k.length > best.k.length)) best = { k, hit };
+  }
+  if (best) return best.hit;
+  for (const k of keys) {
+    if (k.length < 6) continue;
+    for (const [name, hit] of index) {
+      if (name.length >= 6 && withinOneEdit(k, name)) return hit;
+    }
+  }
+  return null;
+}

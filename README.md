@@ -47,6 +47,7 @@
 - Accès caméra avec cadre de scan animé (ligne rouge)
 - **Scan automatique** : la lecture se déclenche dès que la carte est nette, immobile et bien éclairée (conseils « Ne bouge plus », « Plus de lumière », « Trop de reflets »), puis attend que la carte change avant de relire
 - OCR du numéro (`025/193`) avec correction des caractères ambigus (O→0, l→1…) et contraste automatique
+- **Lecture du nom** quand le numéro est illisible (webcam, reflet) : le nom en haut de la carte (« Goupix ») est reconnu, traduit FR→EN, et les cartes de ce Pokémon sont proposées des plus récentes aux plus anciennes
 - **BarcodeDetector** natif (Chrome / Safari) pour détecter QR codes et codes-barres automatiquement
 - Recherche manuelle par numéro de carte (ex : `025`, `163/193`)
 - Résultats en grille cliquables → fiche détaillée
