@@ -1,6 +1,9 @@
 # Dependencies
 node_modules/
 
+ios/Pods/
+ios/build/
+
 # Build output
 dist/
 
@@ -33,3 +36,5 @@ yarn-error.*
 # Claude Code worktrees (ne jamais committer — provoque des erreurs Netlify)
 .claude/worktrees/
 .claire/
+
+Ios/Pods/
