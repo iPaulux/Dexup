@@ -312,13 +312,14 @@ button.list-row:active, .list-row.tap:active { transform: scale(0.99); }
 .group-head img { height: 26px; max-width: 80px; object-fit: contain; }
 
 /* ───────── Sheets ───────── */
-.sheet-backdrop { position: fixed; inset: 0; background: rgba(11, 11, 11, 0.4); animation: fadeIn 0.18s ease both; display: flex; align-items: flex-end; justify-content: center; }
+/* --vvt / --vvh suivent la zone réellement visible : la feuille remonte au-dessus du clavier mobile. */
+.sheet-backdrop { position: fixed; left: 0; right: 0; top: var(--vvt, 0px); height: var(--vvh, 100dvh); background: rgba(11, 11, 11, 0.4); animation: fadeIn 0.18s ease both; display: flex; align-items: flex-end; justify-content: center; }
 .sheet {
-  width: 100%; max-width: 560px; max-height: 92dvh; display: flex; flex-direction: column;
+  width: 100%; max-width: 560px; max-height: calc(var(--vvh, 100dvh) * 0.92); display: flex; flex-direction: column;
   background: var(--bg); border-radius: var(--r-lg) var(--r-lg) 0 0; box-shadow: var(--shadow-pop);
   animation: sheetUp 0.26s cubic-bezier(0.22, 1, 0.36, 1) both;
 }
-.sheet.tall { height: 92dvh; }
+.sheet.tall { height: calc(var(--vvh, 100dvh) * 0.92); }
 .sheet-grip { width: 36px; height: 3px; border-radius: 2px; background: var(--line); margin: 10px auto 0; flex-shrink: 0; }
 .sheet-head { display: flex; align-items: center; gap: 12px; padding: 12px 16px 12px 20px; flex-shrink: 0; }
 .sheet-head .h2 { flex: 1; min-width: 0; font-size: 26px; font-weight: 300; }
@@ -326,7 +327,7 @@ button.list-row:active, .list-row.tap:active { transform: scale(0.99); }
 .sheet-foot { flex-shrink: 0; display: flex; gap: 8px; padding: 12px 20px calc(14px + env(safe-area-inset-bottom, 0px)); background: var(--surface); border-top: 1px solid var(--line); }
 @media (min-width: 900px) {
   .sheet-backdrop { align-items: center; padding: 24px; left: var(--sidebar-w); }
-  .sheet { border-radius: var(--r-lg); max-height: 88dvh; animation: pop 0.2s ease both; overflow: hidden; }
+  .sheet { border-radius: var(--r-lg); max-height: calc(var(--vvh, 100dvh) * 0.88); animation: pop 0.2s ease both; overflow: hidden; }
   .sheet.tall { height: auto; }
   .sheet-grip { display: none; }
   .sheet-head { padding-top: 18px; }
@@ -367,7 +368,6 @@ button.list-row:active, .list-row.tap:active { transform: scale(0.99); }
 .scan-frame { position: relative; height: min(100% - 46px, 118vw); aspect-ratio: 63 / 88; border-radius: 16px; box-shadow: 0 0 0 200vmax rgba(0, 0, 0, 0.55); pointer-events: none; }
 .scan-corner { position: absolute; width: 26px; height: 26px; border: 0 solid #fff; }
 .scan-line { position: absolute; left: 5%; right: 5%; height: 2px; background: var(--signal); box-shadow: 0 0 14px var(--signal); animation: scanLine 2.4s ease-in-out infinite; }
-.scan-zone { position: absolute; left: 5%; right: 5%; bottom: 2.5%; height: 9%; border: 1.5px dashed #fff; border-radius: 6px; }
 .scan-hint { position: relative; z-index: 1; font-family: var(--mono); font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; line-height: 1.5; text-shadow: 0 1px 6px #000; min-height: 30px; display: flex; align-items: center; }
 .scan-state { position: relative; z-index: 1; display: flex; flex-direction: column; align-items: center; gap: 12px; max-width: 300px; }
 .scan-state b { font-family: var(--display); font-weight: 300; font-size: 26px; line-height: 1.15; }

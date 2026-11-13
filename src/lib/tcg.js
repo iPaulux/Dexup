@@ -174,13 +174,13 @@ export const formatEuro = (v) => `${v.toLocaleString('fr-FR', { minimumFractionD
 
 const SEARCH_SELECT = 'id,name,number,rarity,set,images';
 
-export async function searchCards({ name, rarity, number, printedTotal, page = 1, pageSize = 60 }) {
+export async function searchCards({ name, rarity, number, printedTotal, page = 1, pageSize = 60, select = SEARCH_SELECT }) {
   const parts = [];
   if (name) parts.push(`name:"*${name}*"`);
   if (number) parts.push(`number:${number}`);
   if (printedTotal) parts.push(`set.printedTotal:${printedTotal}`);
   if (rarity) parts.push(`rarity:"${rarity}"`);
-  const params = { q: parts.join(' '), pageSize, page, select: SEARCH_SELECT };
+  const params = { q: parts.join(' '), pageSize, page, select };
   if (!number) params.orderBy = 'name';
   const json = await getJson(pokemonApiUrl('/cards', params));
   return { cards: json.data || [], total: json.totalCount || 0 };

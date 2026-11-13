@@ -3,9 +3,17 @@ import { useNavigate } from 'react-router-dom';
 import { CameraOff, Keyboard, Layers, ScanLine, SwitchCamera, X } from 'lucide-react';
 import { useCollection } from '../store/collection';
 import { searchCards } from '../lib/tcg';
-import { cropZone, extractCardNumber, getOcrWorker, isCardNumber, preprocess } from '../lib/scan';
+import { isCardNumber, rankCards, readCard } from '../lib/scan';
+import { getFrToEnMap, resolveSearchTerm } from '../utils/pokemonNames';
 import { CardsView } from '../components/cards';
 import { SearchField, Sheet, plural } from '../components/ui';
+
+const SCAN_SELECT = 'id,name,number,rarity,set,images,hp,attacks,abilities';
+const stripZeros = (n) => String(parseInt(n, 10));
+// « 006/159 » → numéro sans zéros de tête + taille du set : isole presque toujours la bonne carte.
+const findByNumber = async (num, total) => (total
+  ? (await searchCards({ number: stripZeros(num), printedTotal: stripZeros(total), pageSize: 30 })).cards
+  : []);
 
 const BARCODE_OK = typeof window !== 'undefined' && 'BarcodeDetector' in window;
 const CORNERS = [
@@ -19,7 +27,8 @@ export default function Scan() {
   const navigate = useNavigate();
   const { openCard } = useCollection();
   const videoRef = useRef(null);
-  const zoneRef = useRef(null);
+  const frameRef = useRef(null);
+  const names = useRef({});
   const streamRef = useRef(null);
   const startId = useRef(0);
   const lastScan = useRef({ code: null, at: 0 });
@@ -33,34 +42,38 @@ export default function Scan() {
   const [searching, setSearching] = useState(false);
   const [sheet, setSheet] = useState(null); // null | 'results' | 'manual'
 
-  const runSearch = useCallback(async (raw) => {
-    const q = raw.trim();
-    if (!q) return;
+  useEffect(() => { getFrToEnMap().then((map) => { names.current = map; }); }, []);
+
+  // Lance une recherche et affiche le résultat : fiche directe si une carte se détache, liste sinon.
+  const lookup = useCallback(async (label, find) => {
     setSearching(true);
-    setMessage(`Recherche de « ${q} »…`);
+    setMessage(`Recherche de « ${label} »…`);
     try {
-      let cards;
-      if (isCardNumber(q)) {
-        // « 001/165 » : numéro sans zéros de tête + taille du set, ce qui isole presque toujours la bonne carte.
-        const [num, total] = q.split('/').map((n) => String(parseInt(n, 10)));
-        cards = total ? (await searchCards({ number: num, printedTotal: total, pageSize: 30 })).cards : [];
-        if (!cards.length) cards = (await searchCards({ number: num, pageSize: 30 })).cards;
-      } else {
-        cards = (await searchCards({ name: q, pageSize: 20 })).cards;
-      }
+      const cards = await find();
       if (cards.length) {
-        setResults({ query: q, cards });
+        setResults({ query: label, cards });
         setMessage(null);
-        // Une seule carte possible : on ouvre directement sa fiche.
-        if (cards.length === 1) openCard(cards[0]); else setSheet('results');
+        const best = cards.best ?? (cards.length === 1 ? cards[0] : null);
+        if (best) openCard(best); else setSheet('results');
       } else {
-        setMessage(`Aucune carte trouvée pour « ${q} ».`);
+        setMessage(`Aucune carte trouvée pour « ${label} ».`);
       }
     } catch (_) {
       setMessage('Erreur réseau. Vérifie ta connexion.');
     }
     setSearching(false);
   }, [openCard]);
+
+  const runSearch = useCallback((raw) => {
+    const q = raw.trim();
+    if (!q) return;
+    lookup(q, async () => {
+      if (!isCardNumber(q)) return (await searchCards({ name: await resolveSearchTerm(q), pageSize: 30 })).cards;
+      const [num, total] = q.split('/');
+      const exact = await findByNumber(num, total);
+      return exact.length ? exact : (await searchCards({ number: stripZeros(num), pageSize: 30 })).cards;
+    });
+  }, [lookup]);
 
   const stopStream = useCallback(() => {
     startId.current++;
@@ -74,7 +87,7 @@ export default function Scan() {
     setCam('starting');
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: mode, width: { ideal: 1920 }, height: { ideal: 1080 } },
+        video: { facingMode: mode, width: { ideal: 3840 }, height: { ideal: 2160 } },
         audio: false,
       });
       // L'écran a été quitté (ou la caméra relancée) pendant la demande d'autorisation.
@@ -125,32 +138,42 @@ export default function Scan() {
   };
 
   const snap = async () => {
-    const video = videoRef.current;
     if (cam !== 'active' || ocr !== 'idle' || searching) return;
-    const crop = cropZone(video, zoneRef.current);
-    if (!crop) return;
-
     setMessage(null);
     setOcr('loading');
+    let read;
     try {
-      const worker = await getOcrWorker();
-      setOcr('running');
-      let number = extractCardNumber((await worker.recognize(preprocess(crop))).data.text);
-      if (!number) {
-        const inverted = cropZone(video, zoneRef.current, true);
-        if (inverted) number = extractCardNumber((await worker.recognize(preprocess(inverted))).data.text);
-      }
-      setOcr('idle');
-      if (number) {
-        setInput(number);
-        runSearch(number);
-      } else {
-        setMessage('Numéro illisible — rapproche la carte ou saisis-le à la main.');
-      }
+      read = await readCard(videoRef.current, frameRef.current, names.current, () => setOcr('running'));
     } catch (_) {
       setOcr('idle');
       setMessage('Lecture indisponible — saisis le numéro à la main.');
+      return;
     }
+    setOcr('idle');
+    const { name, number } = read;
+    if (!name && !number) {
+      setMessage('Carte non reconnue — cadre-la bien à plat, sans reflet, ou saisis son numéro.');
+      return;
+    }
+    const label = [name && name.replace(/^./, (c) => c.toUpperCase()), number].filter(Boolean).join(' · ');
+    setInput(number ?? name);
+    lookup(label, async () => {
+      // 1. Numéro + taille du set : la carte exacte. Le nom lu départage les sets de même taille.
+      if (number) {
+        const exact = await findByNumber(...number.split('/'));
+        const named = name ? exact.filter((c) => c.name.toLowerCase().includes(name)) : exact;
+        if (named.length) return named;
+        if (exact.length && !name) return exact;
+      }
+      if (!name) return [];
+      // 2. Toutes les cartes de ce Pokémon, classées d'après les PV et les attaques lus sur la carte.
+      const { cards } = await searchCards({ name, pageSize: 100, select: SCAN_SELECT });
+      const ranked = rankCards(cards, read);
+      const clearWinner = ranked.length > 1 && ranked[0].score >= 3 && ranked[0].score > ranked[1].score;
+      const list = ranked.map((r) => r.card);
+      if (clearWinner) list.best = ranked[0].card; // fiche ouverte directement, la liste reste dans « Résultats »
+      return list;
+    });
   };
 
   const submitManual = () => {
@@ -163,8 +186,8 @@ export default function Scan() {
   const busy = ocr !== 'idle' || searching;
   const hint = message
     ?? (ocr === 'loading' ? 'Préparation de la lecture (première fois)…'
-      : ocr === 'running' ? 'Lecture du numéro…'
-        : 'Place le numéro de la carte dans le cadre en pointillés');
+      : ocr === 'running' ? 'Lecture de la carte…'
+        : 'Place la carte entière dans le cadre, puis appuie sur le bouton');
 
   return (
     <div className="scan">
@@ -181,10 +204,9 @@ export default function Scan() {
       <div className="scan-center">
         {cam === 'active' && (
           <>
-            <div className="scan-frame">
+            <div className="scan-frame" ref={frameRef}>
               {CORNERS.map((style, i) => <span key={i} className="scan-corner" style={style} />)}
               {!busy && <span className="scan-line" />}
-              <span className="scan-zone" ref={zoneRef} />
             </div>
             <p className="scan-hint" role="status">{hint}</p>
           </>
@@ -208,7 +230,7 @@ export default function Scan() {
         <button className="scan-side" onClick={() => setSheet('manual')}>
           <Keyboard size={22} /> Saisir
         </button>
-        <button className="scan-snap" onClick={snap} disabled={cam !== 'active' || busy} aria-label="Lire le numéro de la carte">
+        <button className="scan-snap" onClick={snap} disabled={cam !== 'active' || busy} aria-label="Reconnaître la carte">
           {busy ? <div className="spinner" /> : <ScanLine size={30} />}
         </button>
         <button className="scan-side" onClick={() => setSheet('results')} disabled={!results.cards.length}>
